@@ -134,6 +134,18 @@
       <input id="password" type="password" autocomplete="current-password" minlength="6" required>
       <p class="msg" id="auth-msg" role="alert"></p>
       <button id="auth-submit" type="submit">Entrar</button>
+      <button id="forgot" class="ghost small" type="button" style="margin-left:8px">He olvidado mi contraseña</button>
+    </form>
+  </section>
+
+  <!-- NUEVA CONTRASEÑA (tras pulsar el enlace del email) -->
+  <section id="recovery" class="card" hidden>
+    <h2>Elige una contraseña nueva</h2>
+    <form id="recovery-form">
+      <label for="newpass">Nueva contraseña (mínimo 6 caracteres)</label>
+      <input id="newpass" type="password" autocomplete="new-password" minlength="6" required>
+      <p class="msg" id="recovery-msg" role="alert"></p>
+      <button type="submit">Guardar contraseña</button>
     </form>
   </section>
 
@@ -209,6 +221,8 @@ function niceError(err) {
   if (t.includes("profiles_nickname_key") || t.includes("Database error saving new user")) return "Ese nombre ya está en uso. Prueba con otro.";
   if (t.includes("Invalid login credentials")) return "Email o contraseña incorrectos.";
   if (t.includes("already registered")) return "Ese email ya tiene cuenta. Usa «Entrar».";
+  if (t.includes("rate limit") || t.includes("security purposes")) return "Demasiados intentos. Espera unos minutos y vuelve a probar.";
+  if (t.includes("same password")) return "La nueva contraseña debe ser distinta de la anterior.";
   if (t.includes("Password should be")) return "La contraseña es demasiado corta (mínimo 6).";
   return t;
 }
@@ -222,6 +236,7 @@ function setMode(m) {
   $("nickname").required = m === "register";
   $("auth-submit").textContent = m === "login" ? "Entrar" : "Crear cuenta";
   $("password").autocomplete = m === "login" ? "current-password" : "new-password";
+  $("forgot").hidden = m !== "login";
   setMsg("auth-msg", "");
 }
 $("tab-login").addEventListener("click", () => setMode("login"));
@@ -256,6 +271,42 @@ function showAuth() {
   $("app").hidden = true;
   $("who").hidden = true;
 }
+
+// ---------- PASSWORD RECOVERY ----------
+let recovering = location.hash.includes("type=recovery");
+
+function showRecovery() {
+  $("auth").hidden = true;
+  $("app").hidden = true;
+  $("who").hidden = true;
+  $("recovery").hidden = false;
+}
+
+sb.auth.onAuthStateChange((event) => {
+  if (event === "PASSWORD_RECOVERY") { recovering = true; showRecovery(); }
+});
+
+$("forgot").addEventListener("click", async () => {
+  const email = $("email").value.trim();
+  if (!email) return setMsg("auth-msg", "Escribe tu email arriba y vuelve a pulsar.");
+  const { error } = await sb.auth.resetPasswordForEmail(email, {
+    redirectTo: location.origin + location.pathname
+  });
+  if (error) return setMsg("auth-msg", niceError(error));
+  setMsg("auth-msg", "Si ese email tiene cuenta, te llegará un enlace para elegir una contraseña nueva. Mira también el spam.", true);
+});
+
+$("recovery-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setMsg("recovery-msg", "");
+  const { error } = await sb.auth.updateUser({ password: $("newpass").value });
+  if (error) return setMsg("recovery-msg", niceError(error));
+  recovering = false;
+  $("newpass").value = "";
+  $("recovery").hidden = true;
+  history.replaceState(null, "", location.pathname);
+  await boot();
+});
 
 // ---------- DATA ----------
 async function loadProfile(userId) {
@@ -385,6 +436,7 @@ $("add-form").addEventListener("submit", async (e) => {
 // ---------- BOOT ----------
 async function boot() {
   const { data } = await sb.auth.getSession();
+  if (recovering && data.session) return showRecovery();
   if (!data.session) return showAuth();
   try {
     me = await loadProfile(data.session.user.id);
