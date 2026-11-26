@@ -130,6 +130,7 @@
   #view-group .view-header { border-top: 4px solid #e8bbd5; }
   #view-catalog .view-header, #view-admin .view-header { border-top: 4px solid var(--flame); }
   #view-found .view-header { border-top: 4px solid #bcd9ef; }
+  .search-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .search-entry > div { min-width: 0; overflow-wrap: anywhere; }
   .search-entry .count { display: block; margin-left: 0; }
   .catalog-results { list-style: none; padding: 0; margin: 8px 0 0; }
@@ -568,10 +569,26 @@ async function setStatus(id, status) {
   await loadWants();
 }
 
-async function deleteWant(id) {
-  const { error } = await sb.from("wants").delete().eq("id", id).eq("user_id", me.id);
-  if (error) alert(niceError(error));
-  await loadWants();
+function withdrawButton(w) {
+  const button = h("button", {
+    type: "button", class: "ghost small", "aria-label": "Quitarme de " + w.item,
+    onclick: async () => {
+      const profile = me;
+      if (profile?.id !== w.user_id || !confirm("¿Quitar «" + w.item + "» de tus búsquedas?")) return;
+      button.disabled = true;
+      try {
+        const { data, error } = await sb.from("wants").delete()
+          .eq("id", w.id).eq("user_id", profile.id).eq("status", "open").select("id").maybeSingle();
+        if (me !== profile) return;
+        if (error) alert(niceError(error));
+        else if (!data) alert("No se pudo retirar la búsqueda. Se actualizará la lista.");
+        await loadWants();
+      } finally {
+        button.disabled = false;
+      }
+    }
+  }, "Quitarme");
+  return button;
 }
 
 // ---------- RENDER ----------
@@ -730,10 +747,10 @@ function renderMine() {
       h("div", {}, h("div", { class: "item-name" }, w.item),
         h("span", { class: "count" }, labels.get(w.category) || w.category),
         w.notes ? h("p", { class: "note" }, w.notes) : ""),
-      h("button", {
+      h("div", { class: "search-actions" }, h("button", {
         type: "button", class: "ghost small", "aria-label": "Marcar " + w.item + " como encontrado",
         onclick: () => { if (confirm("¿Marcar «" + w.item + "» como encontrado?")) setStatus(w.id, "found"); }
-      }, "✓ Encontrado")
+      }, "✓ Encontrado"), withdrawButton(w))
     ));
   }
 }
@@ -803,12 +820,7 @@ function render() {
               type: "button", title: "Marcar como encontrado", "aria-label": "Encontrado: " + nick,
               onclick: () => { if (confirm("¿Marcar «" + g.name + "» de " + nick + " como encontrado?")) setStatus(w.id, "found"); }
             }, "✓"));
-          }
-          if (mine && me.is_admin) {
-            chip.append(h("button", {
-              type: "button", title: "Borrar definitivamente", "aria-label": "Borrar: " + nick,
-              onclick: () => { if (confirm("¿Borrar definitivamente la entrada de " + nick + "?")) deleteWant(w.id); }
-            }, "🗑"));
+            chip.append(withdrawButton(w));
           }
           chips.append(chip);
         }
