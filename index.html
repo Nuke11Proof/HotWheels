@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lista Hot Wheels</title>
+<style>
+  :root {
+    --bg: #f2f1ee;
+    --card: #ffffff;
+    --ink: #1a1d24;
+    --muted: #6b7080;
+    --line: #dcdad4;
+    --flame: #e8470f;
+    --flame-ink: #ffffff;
+    --chip: #ffe9c2;
+    --chip-ink: #5a3500;
+    --mine: #ffd23f;
+    --ok: #1f8a4c;
+    --danger: #c0262d;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161b;
+      --card: #1e2128;
+      --ink: #f1f0ec;
+      --muted: #9aa0b0;
+      --line: #2e323c;
+      --flame: #ff6a2b;
+      --flame-ink: #1a1d24;
+      --chip: #3a2c14;
+      --chip-ink: #ffe2a8;
+      --mine: #ffd23f;
+      --ok: #4cc27f;
+      --danger: #ff6b70;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    line-height: 1.45;
+    padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
+  }
+  main { max-width: 640px; margin: 0 auto; padding: 16px; }
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 16px;
+  }
+  h1 {
+    margin: 0; font-size: 1.5rem; line-height: 1.1;
+    font-family: Impact, "Arial Narrow Bold", "Helvetica Neue", sans-serif;
+    font-weight: 400; letter-spacing: .01em;
+  }
+  h2 {
+    margin: 0 0 8px; font-size: 1.05rem;
+    padding-left: 10px; border-left: 5px solid var(--flame);
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 10px; padding: 14px; margin-bottom: 14px;
+  }
+  label { display: block; font-size: .85rem; color: var(--muted); margin: 10px 0 4px; }
+  input, select, button { font: inherit; }
+  input, select {
+    width: 100%; padding: 10px; border-radius: 8px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--ink);
+  }
+  button {
+    cursor: pointer; border: 0; border-radius: 8px; padding: 10px 14px;
+    background: var(--flame); color: var(--flame-ink); font-weight: 600;
+  }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  button.small { padding: 3px 8px; font-size: .8rem; }
+  button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
+    outline: 3px solid var(--mine); outline-offset: 2px;
+  }
+  .row { display: flex; gap: 8px; }
+  .row > * { flex: 1; }
+  .row > button { flex: 0 0 auto; }
+  .tabs { display: flex; gap: 8px; margin-bottom: 4px; }
+  .tabs button { flex: 1; }
+  .tabs button[aria-pressed="false"] { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .msg { margin: 10px 0 0; font-size: .9rem; color: var(--danger); min-height: 1.2em; }
+  .msg.ok { color: var(--ok); }
+  .item { padding: 10px 0; border-top: 1px solid var(--line); }
+  .item:first-of-type { border-top: 0; }
+  .item-name { font-weight: 600; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; align-items: center; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 4px;
+    background: var(--chip); color: var(--chip-ink);
+    border-radius: 999px; padding: 2px 4px 2px 10px; font-size: .85rem;
+  }
+  .chip.mine { background: var(--mine); color: #3a2a00; }
+  .chip button {
+    padding: 0 6px; background: transparent; color: inherit;
+    border-radius: 999px; font-size: .9rem; line-height: 1.4;
+  }
+  .chip button:hover { background: rgba(0,0,0,.12); }
+  .empty { color: var(--muted); font-size: .9rem; margin: 4px 0; }
+  details summary { cursor: pointer; font-weight: 600; }
+  .found-line { font-size: .88rem; color: var(--muted); padding: 6px 0; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .found-line:first-of-type { border-top: 0; }
+  .who { font-size: .85rem; color: var(--muted); text-align: right; }
+  .who button { margin-top: 4px; }
+  .badge { background: var(--flame); color: var(--flame-ink); border-radius: 4px; padding: 0 5px; font-size: .75rem; margin-left: 4px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🔎🚗 Lista Hot Wheels</h1>
+    <div class="who" id="who" hidden></div>
+  </header>
+
+  <!-- LOGIN / REGISTRO -->
+  <section id="auth" class="card" hidden>
+    <div class="tabs">
+      <button id="tab-login" aria-pressed="true" type="button">Entrar</button>
+      <button id="tab-register" aria-pressed="false" type="button">Crear cuenta</button>
+    </div>
+    <form id="auth-form">
+      <div id="nick-wrap" hidden>
+        <label for="nickname">Nombre que verá el grupo</label>
+        <input id="nickname" autocomplete="nickname" maxlength="24" placeholder="Ej: Kevin">
+      </div>
+      <label for="email">Email</label>
+      <input id="email" type="email" autocomplete="email" required>
+      <label for="password">Contraseña (mínimo 6 caracteres)</label>
+      <input id="password" type="password" autocomplete="current-password" minlength="6" required>
+      <p class="msg" id="auth-msg" role="alert"></p>
+      <button id="auth-submit" type="submit">Entrar</button>
+    </form>
+  </section>
+
+  <!-- APP -->
+  <section id="app" hidden>
+    <form id="add-form" class="card">
+      <div class="row">
+        <div>
+          <label for="category">Categoría</label>
+          <select id="category"></select>
+        </div>
+      </div>
+      <label for="item">¿Qué buscas?</label>
+      <div class="row">
+        <input id="item" maxlength="80" placeholder="Ej: Ferrari 308" required>
+        <button type="submit">Apuntar</button>
+      </div>
+      <p class="msg" id="add-msg" role="alert"></p>
+    </form>
+
+    <div id="lists"></div>
+
+    <details class="card" id="found-box">
+      <summary>Ya encontrados</summary>
+      <div id="found-list"></div>
+    </details>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
+<script>
+// ====== CONFIG: pega aquí tus datos de Supabase (Settings → API) ======
+const SUPABASE_URL = "https://jtsgvxxfvrecbyxpkbwe.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_JmETs8eQXGnYfym5zQHbsg_5geHYf_b";
+// =======================================================================
+
+const CATEGORIES = [
+  { id: "basicos",        label: "🚗 Básicos" },
+  { id: "team_transport", label: "🚛 Team Transport" },
+  { id: "premium",        label: "💛 Premium" },
+  { id: "collector",      label: "🔴 Collector" },
+  { id: "reservas",       label: "🔰 Reservas" }
+];
+
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const $ = (id) => document.getElementById(id);
+
+let me = null;        // profile row of the current user
+let wants = [];       // all wants (open + found)
+let mode = "login";   // login | register
+
+// ---------- tiny DOM helper (uses textContent, so user text is never HTML) ----------
+function h(tag, props, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(props || {})) {
+    if (k === "class") node.className = v;
+    else if (k === "onclick") node.addEventListener("click", v);
+    else if (v !== false && v != null) node.setAttribute(k, v);
+  }
+  for (const c of children) node.append(c);
+  return node;
+}
+
+function setMsg(id, text, ok) {
+  const m = $(id);
+  m.textContent = text || "";
+  m.classList.toggle("ok", !!ok);
+}
+
+function niceError(err) {
+  const t = (err && err.message) || "Error desconocido";
+  if (t.includes("duplicate key") || t.includes("wants_no_dupes")) return "Ya lo tienes apuntado en esa categoría.";
+  if (t.includes("profiles_nickname_key") || t.includes("Database error saving new user")) return "Ese nombre ya está en uso. Prueba con otro.";
+  if (t.includes("Invalid login credentials")) return "Email o contraseña incorrectos.";
+  if (t.includes("already registered")) return "Ese email ya tiene cuenta. Usa «Entrar».";
+  if (t.includes("Password should be")) return "La contraseña es demasiado corta (mínimo 6).";
+  return t;
+}
+
+// ---------- AUTH ----------
+function setMode(m) {
+  mode = m;
+  $("tab-login").setAttribute("aria-pressed", m === "login");
+  $("tab-register").setAttribute("aria-pressed", m === "register");
+  $("nick-wrap").hidden = m !== "register";
+  $("nickname").required = m === "register";
+  $("auth-submit").textContent = m === "login" ? "Entrar" : "Crear cuenta";
+  $("password").autocomplete = m === "login" ? "current-password" : "new-password";
+  setMsg("auth-msg", "");
+}
+$("tab-login").addEventListener("click", () => setMode("login"));
+$("tab-register").addEventListener("click", () => setMode("register"));
+
+$("auth-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setMsg("auth-msg", "");
+  const email = $("email").value.trim();
+  const password = $("password").value;
+  let res;
+  if (mode === "login") {
+    res = await sb.auth.signInWithPassword({ email, password });
+  } else {
+    const nickname = $("nickname").value.trim();
+    if (!nickname) return setMsg("auth-msg", "Escribe un nombre.");
+    res = await sb.auth.signUp({ email, password, options: { data: { nickname } } });
+  }
+  if (res.error) return setMsg("auth-msg", niceError(res.error));
+  if (!res.data.session) return setMsg("auth-msg", "Cuenta creada, pero Supabase pide confirmar el email. Desactiva «Confirm email» en Authentication → Providers → Email.");
+  await boot();
+});
+
+async function logout() {
+  await sb.auth.signOut();
+  me = null; wants = [];
+  showAuth();
+}
+
+function showAuth() {
+  $("auth").hidden = false;
+  $("app").hidden = true;
+  $("who").hidden = true;
+}
+
+// ---------- DATA ----------
+async function loadProfile(userId) {
+  const { data, error } = await sb.from("profiles").select("*").eq("id", userId).single();
+  if (error) throw error;
+  return data;
+}
+
+async function loadWants() {
+  const { data, error } = await sb
+    .from("wants")
+    .select("id,user_id,category,item,status,created_at,closed_at,profiles(nickname)")
+    .order("created_at", { ascending: true });
+  if (error) { console.error(error); return; }
+  wants = data;
+  render();
+}
+
+async function addWant(category, item) {
+  const { error } = await sb.from("wants").insert({ category, item });
+  if (error) return niceError(error);
+  await loadWants();
+  return null;
+}
+
+async function setStatus(id, status) {
+  const patch = status === "found"
+    ? { status, closed_at: new Date().toISOString() }
+    : { status, closed_at: null };
+  const { error } = await sb.from("wants").update(patch).eq("id", id);
+  if (error) alert(niceError(error));
+  await loadWants();
+}
+
+async function deleteWant(id) {
+  const { error } = await sb.from("wants").delete().eq("id", id);
+  if (error) alert(niceError(error));
+  await loadWants();
+}
+
+// ---------- RENDER ----------
+function render() {
+  const lists = $("lists");
+  lists.replaceChildren();
+
+  for (const cat of CATEGORIES) {
+    const open = wants.filter((w) => w.category === cat.id && w.status === "open");
+    const card = h("section", { class: "card" }, h("h2", {}, cat.label));
+
+    if (!open.length) {
+      card.append(h("p", { class: "empty" }, "Nadie busca nada aquí todavía."));
+    } else {
+      const groups = new Map();
+      for (const w of open) {
+        const key = w.item.trim().toLowerCase();
+        if (!groups.has(key)) groups.set(key, { name: w.item.trim(), rows: [] });
+        groups.get(key).rows.push(w);
+      }
+      for (const g of groups.values()) {
+        const chips = h("div", { class: "chips" });
+        for (const w of g.rows) {
+          const mine = w.user_id === me.id;
+          const nick = (w.profiles && w.profiles.nickname) || "?";
+          const chip = h("span", { class: "chip" + (mine ? " mine" : "") }, nick);
+          if (mine || me.is_admin) {
+            chip.append(h("button", {
+              type: "button", title: "Marcar como encontrado", "aria-label": "Encontrado: " + nick,
+              onclick: () => { if (confirm("¿Marcar «" + g.name + "» de " + nick + " como encontrado?")) setStatus(w.id, "found"); }
+            }, "✓"));
+          }
+          if (me.is_admin) {
+            chip.append(h("button", {
+              type: "button", title: "Borrar definitivamente", "aria-label": "Borrar: " + nick,
+              onclick: () => { if (confirm("¿Borrar definitivamente la entrada de " + nick + "?")) deleteWant(w.id); }
+            }, "🗑"));
+          }
+          chips.append(chip);
+        }
+        if (!g.rows.some((w) => w.user_id === me.id)) {
+          chips.append(h("button", {
+            type: "button", class: "ghost small",
+            onclick: async () => { const err = await addWant(cat.id, g.name); if (err) alert(err); }
+          }, "+ Yo también"));
+        }
+        card.append(h("div", { class: "item" }, h("div", { class: "item-name" }, g.name), chips));
+      }
+    }
+    lists.append(card);
+  }
+
+  // Found list (latest 40)
+  const found = wants
+    .filter((w) => w.status === "found")
+    .sort((a, b) => new Date(b.closed_at) - new Date(a.closed_at))
+    .slice(0, 40);
+  const box = $("found-list");
+  box.replaceChildren();
+  if (!found.length) box.append(h("p", { class: "empty" }, "Todavía no hay nada encontrado."));
+  for (const w of found) {
+    const nick = (w.profiles && w.profiles.nickname) || "?";
+    const d = w.closed_at ? new Date(w.closed_at).toLocaleDateString("es-ES") : "";
+    const line = h("div", { class: "found-line" },
+      h("span", {}, w.item + " — " + nick + " (" + d + ")"));
+    if (w.user_id === me.id || me.is_admin) {
+      line.append(h("button", {
+        type: "button", class: "ghost small", title: "Volver a apuntar",
+        onclick: () => setStatus(w.id, "open")
+      }, "↩ Reabrir"));
+    }
+    box.append(line);
+  }
+}
+
+// ---------- ADD FORM ----------
+$("add-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  setMsg("add-msg", "");
+  const item = $("item").value.trim();
+  if (!item) return;
+  const err = await addWant($("category").value, item);
+  if (err) return setMsg("add-msg", err);
+  $("item").value = "";
+  setMsg("add-msg", "Apuntado ✓", true);
+  setTimeout(() => setMsg("add-msg", ""), 2000);
+});
+
+// ---------- BOOT ----------
+async function boot() {
+  const { data } = await sb.auth.getSession();
+  if (!data.session) return showAuth();
+  try {
+    me = await loadProfile(data.session.user.id);
+  } catch (err) {
+    console.error(err);
+    await sb.auth.signOut();
+    return showAuth();
+  }
+  $("auth").hidden = true;
+  $("app").hidden = false;
+
+  const who = $("who");
+  who.replaceChildren(
+    h("div", {}, me.nickname, me.is_admin ? h("span", { class: "badge" }, "admin") : ""),
+    h("button", { type: "button", class: "ghost small", onclick: logout }, "Salir")
+  );
+  who.hidden = false;
+
+  const sel = $("category");
+  if (!sel.options.length) {
+    for (const c of CATEGORIES) sel.append(h("option", { value: c.id }, c.label));
+  }
+  await loadWants();
+}
+
+// Refresh when coming back to the tab, and every 30s while visible
+document.addEventListener("visibilitychange", () => { if (!document.hidden && me) loadWants(); });
+setInterval(() => { if (!document.hidden && me) loadWants(); }, 30000);
+
+if (!SUPABASE_URL.startsWith("https://")) {
+  document.body.prepend(h("p", { class: "msg", style: "padding:16px" }, "Falta configurar SUPABASE_URL y SUPABASE_ANON_KEY en el código."));
+}
+setMode("login");
+boot();
+</script>
+</body>
+</html>
