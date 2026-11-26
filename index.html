@@ -251,15 +251,24 @@
         <p>Explora las categorías y apúntate a los modelos que buscas.</p>
       </div>
       <section class="card" aria-labelledby="mainline-title">
-        <h2 id="mainline-title">Básicos 2026</h2>
-        <label for="mainline-query">Buscar por modelo, serie o número de colección</label>
-        <input id="mainline-query" type="search" placeholder="Ej. Porsche, Cool Classics o 250" autocomplete="off">
+        <h2 id="mainline-title">Básicos por año</h2>
+        <label for="mainline-year">Año del catálogo</label>
+        <select id="mainline-year">
+          <option value="2027" selected>2027 · catálogo parcial</option>
+          <option value="2026">2026</option>
+        </select>
+        <label for="mainline-query">Buscar por modelo, serie, SKU o número de colección</label>
+        <input id="mainline-query" type="search" placeholder="Ej. Ferrari 308 GTS, JNX35 o 250" autocomplete="off">
         <p id="mainline-status" class="empty" role="status"></p>
         <ul class="catalog-results" id="mainline-results"></ul>
         <button id="mainline-more" type="button" class="ghost small" hidden>Mostrar más modelos</button>
-        <p class="catalog-links">
+        <p class="catalog-links" id="mainline-source-2026" hidden>
           <a href="https://community.creations.mattel.com/news/hot-wheels/public-news-stories/download-the-2026-hot-wheels-full-year-poster-wave-4-r2280/" target="_blank" rel="noopener noreferrer">Ver el póster de Mattel</a>
           · <a href="https://munclemikes.com/pages/hot-wheels-complete-casting-list-of-cars-2026" target="_blank" rel="noopener noreferrer">Fuente de la lista</a>
+        </p>
+        <p class="catalog-links" id="mainline-source-2027">
+          <a href="https://allhotwheels.com/car/2027/mainline" target="_blank" rel="noopener noreferrer">Consultar Básicos 2027 en All Hot Wheels</a>
+          · <a href="https://www.unnew.co.za/2027-hot-wheels-models/" target="_blank" rel="noopener noreferrer">Fuente de la lista</a>
         </p>
       </section>
       <div class="toolbar" role="group" aria-label="Vista de secciones">
@@ -310,8 +319,8 @@ let wants = [];       // all wants (open + found)
 let categories = DEFAULT_CATEGORIES;
 let loadSequence = 0;
 let products = [];    // catalog of products (can have nobody looking for them)
-let mainline = null;
-let mainlineLoading = false;
+const mainline = new Map();
+const mainlineLoading = new Set();
 const MAINLINE_PAGE_SIZE = 20;
 let mainlineLimit = MAINLINE_PAGE_SIZE;
 let mode = "login";   // login | register
@@ -554,37 +563,47 @@ function searchKey(value) {
 }
 
 async function loadMainline() {
-  if (mainlineLoading) return;
-  if (mainline) return renderMainline();
-  mainlineLoading = true;
-  $("mainline-status").textContent = "Cargando catálogo de 2026…";
+  const year = $("mainline-year").value;
+  if (mainline.has(year)) return renderMainline();
+  $("mainline-status").textContent = "Cargando catálogo de " + year + "…";
+  $("mainline-results").replaceChildren();
+  $("mainline-more").hidden = true;
+  if (mainlineLoading.has(year)) return;
+  mainlineLoading.add(year);
   try {
-    const response = await fetch("data/mainline-2026.json");
+    const response = await fetch("data/mainline-" + year + ".json");
     if (!response.ok) throw new Error("No se pudo leer el catálogo");
-    mainline = await response.json();
-    if (me) renderMainline();
+    mainline.set(year, await response.json());
+    if ($("mainline-year").value === year) renderMainline();
   } catch {
-    $("mainline-status").textContent = "No se pudo cargar el catálogo de 2026. Vuelve a abrir Catálogo para reintentar.";
+    if ($("mainline-year").value === year) {
+      $("mainline-status").textContent = "No se pudo cargar el catálogo. Vuelve a abrir Catálogo para reintentar.";
+    }
   } finally {
-    mainlineLoading = false;
+    mainlineLoading.delete(year);
   }
 }
 
 function renderMainline() {
-  if (!mainline || !me) return;
+  const year = $("mainline-year").value;
+  $("mainline-source-2026").hidden = year !== "2026";
+  $("mainline-source-2027").hidden = year !== "2027";
+  const models = mainline.get(year);
+  if (!models || !me) return;
   const query = searchKey($("mainline-query").value);
   const tokens = query.split(/\s+/);
   const numberQuery = query.match(/^#?(\d{1,3})(?:\/250)?$/);
-  const matches = mainline.filter((model) => numberQuery
+  const matches = models.filter((model) => numberQuery
     ? model.number === Number(numberQuery[1])
-    : tokens.every((token) => searchKey(model.name + " " + model.series).includes(token)));
+    : tokens.every((token) => searchKey([model.name, model.series, model.sku].join(" ")).includes(token)));
   const own = new Set(wants.filter((w) => w.user_id === me.id && w.status === "open" && w.category === "basicos")
     .map((w) => searchKey(w.item)));
   $("mainline-status").textContent = matches.length === 1 ? "1 modelo" : matches.length + " modelos";
   $("mainline-more").hidden = matches.length <= mainlineLimit;
   $("mainline-results").replaceChildren(...matches.slice(0, mainlineLimit).map((model) => {
-    const number = String(model.number).padStart(3, "0");
-    const item = model.name + " · 2026 #" + number;
+    const number = model.number ? "#" + String(model.number).padStart(3, "0") : "";
+    const item = model.name + " · " + year + " " + (model.sku || number);
+    const details = [number && number + "/250", model.series, model.sku].filter(Boolean);
     const alreadyOpen = own.has(searchKey(item));
     const button = h("button", {
       type: "button", class: "ghost small", disabled: alreadyOpen,
@@ -600,10 +619,16 @@ function renderMainline() {
     }, alreadyOpen ? "Apuntado" : "+ Apuntarme");
     return h("li", { class: "item search-entry" },
       h("div", {}, h("div", { class: "item-name" }, model.name),
-        h("span", { class: "count" }, "#" + number + "/250 · " + model.series)), button);
+        h("span", { class: "count" }, details.join(" · ")),
+        model.url ? h("a", { href: model.url, target: "_blank", rel: "noopener noreferrer", class: "count" }, "Ver referencia") : ""), button);
   }));
 }
 
+$("mainline-year").addEventListener("change", () => {
+  mainlineLimit = MAINLINE_PAGE_SIZE;
+  renderMainline();
+  loadMainline();
+});
 $("mainline-query").addEventListener("input", () => {
   mainlineLimit = MAINLINE_PAGE_SIZE;
   renderMainline();
