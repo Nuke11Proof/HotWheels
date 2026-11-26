@@ -248,7 +248,7 @@
       <section class="card catalog-guide" id="catalog-guide" aria-labelledby="guide-title" hidden>
         <h2 id="guide-title">Empieza por el catálogo</h2>
         <ol>
-          <li>Elige el año y la categoría, y busca por nombre o SKU.</li>
+          <li>Elige el año y la categoría. Busca por nombre.</li>
           <li>Comprueba la foto y pulsa <strong>Apuntarme</strong>.</li>
           <li>Consulta tus pendientes en <strong>Mis búsquedas</strong>.</li>
         </ol>
@@ -275,8 +275,8 @@
             </select>
           </div>
         </div>
-        <label for="mainline-query">Buscar por modelo, serie, SKU o número de colección</label>
-        <input id="mainline-query" type="search" placeholder="Ej. Ferrari 308 GTS, JNX35 o 250" autocomplete="off">
+        <label for="mainline-query">Busca por nombre</label>
+        <input id="mainline-query" type="search" placeholder="Ej. Ferrari 308 GTS" autocomplete="off">
         <p id="mainline-status" class="empty" role="status"></p>
         <ul class="catalog-results" id="mainline-results"></ul>
         <button id="mainline-more" type="button" class="ghost small" hidden>Mostrar más modelos</button>
@@ -684,7 +684,7 @@ function renderMainline() {
   $("mainline-results").replaceChildren(...matches.slice(0, mainlineLimit).map((model) => {
     const number = model.number ? "#" + String(model.number).padStart(3, "0") : "";
     const item = catalogItem(model, year);
-    const details = [number && number + "/250", model.series, model.wave, model.sku].filter(Boolean);
+    const details = [number && number + "/250", model.series, model.wave].filter(Boolean);
     const alreadyOpen = own.has(searchKey(item));
     const button = h("button", {
       type: "button", class: "ghost small", disabled: alreadyOpen || !categories.some((cat) => cat.id === category),
