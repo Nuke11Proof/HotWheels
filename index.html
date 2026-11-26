@@ -130,6 +130,11 @@
   #view-group .view-header { border-top: 4px solid #e8bbd5; }
   #view-catalog .view-header, #view-admin .view-header { border-top: 4px solid var(--flame); }
   #view-found .view-header { border-top: 4px solid #bcd9ef; }
+  #mine-list .search-entry { justify-content: flex-start; }
+  #mine-list .search-entry > .search-copy { flex: 1 1 150px; }
+  .catalog-guide { border-left: 4px solid var(--mine); }
+  .catalog-guide ol { margin: 8px 0 12px; padding-left: 22px; }
+  .manual-entry[open] summary { margin-bottom: 8px; }
   .search-actions { display: flex; flex-wrap: wrap; gap: 6px; }
   .search-entry > div { min-width: 0; overflow-wrap: anywhere; }
   .search-entry .count { display: block; margin-left: 0; }
@@ -210,29 +215,8 @@
           <h2 id="mine-title">Mis búsquedas</h2>
           <p id="mine-count"></p>
         </div>
-        <button type="button" id="add-toggle" aria-controls="add-form" aria-expanded="false">+ Nueva búsqueda</button>
+        <button type="button" id="open-catalog" aria-controls="view-catalog">+ Buscar en catálogo</button>
       </div>
-      <form id="add-form" class="card" hidden>
-        <div class="row">
-          <div>
-            <label for="category">Categoría</label>
-            <select id="category"></select>
-          </div>
-        </div>
-        <label for="item">¿Qué buscas?</label>
-        <p class="empty" id="catalog-help">Por ahora hay pocos modelos en el catálogo. Los administradores irán añadiendo más. Si el tuyo no aparece, puedes escribirlo.</p>
-        <div class="row">
-          <input id="item" maxlength="80" placeholder="Ej: Ferrari 308" list="suggest" autocomplete="off" aria-describedby="catalog-help" required>
-          <datalist id="suggest"></datalist>
-          <button type="submit">Apuntar</button>
-        </div>
-        <details class="notes-input" id="notes-input">
-          <summary>Notas opcionales</summary>
-          <label for="notes">Notas visibles para el grupo</label>
-          <textarea id="notes" rows="2" maxlength="300" placeholder="Color, variante o referencia"></textarea>
-        </details>
-        <p class="msg" id="add-msg" role="alert"></p>
-      </form>
       <div class="card" id="mine-list"></div>
     </section>
 
@@ -261,6 +245,15 @@
         <h2 id="catalog-title">Catálogo</h2>
         <p>Explora las categorías y apúntate a los modelos que buscas.</p>
       </div>
+      <section class="card catalog-guide" id="catalog-guide" aria-labelledby="guide-title" hidden>
+        <h2 id="guide-title">Empieza por el catálogo</h2>
+        <ol>
+          <li>Elige el año y la categoría, y busca por nombre o SKU.</li>
+          <li>Comprueba la foto y pulsa <strong>Apuntarme</strong>.</li>
+          <li>Consulta tus pendientes en <strong>Mis búsquedas</strong>.</li>
+        </ol>
+        <button id="guide-done" type="button" class="ghost small">Entendido</button>
+      </section>
       <section class="card" aria-labelledby="mainline-title">
         <h2 id="mainline-title">Buscar lanzamientos</h2>
         <div class="catalog-filters">
@@ -269,6 +262,7 @@
             <select id="catalog-category">
               <option value="basicos">Básicos</option>
               <option value="premium">Premium</option>
+              <option value="silver">Silver Series</option>
               <option value="team_transport">Team Transport</option>
               <option value="collector">Collector</option>
             </select>
@@ -303,6 +297,30 @@
         <button type="button" class="ghost" id="collapse-all">Contraer todo</button>
       </div>
       <div id="lists"></div>
+      <details class="card manual-entry" id="manual-entry">
+        <summary>¿No encuentras el modelo? Añadir manualmente</summary>
+        <form id="add-form">
+          <div class="row">
+            <div>
+              <label for="category">Categoría</label>
+              <select id="category"></select>
+            </div>
+          </div>
+          <label for="item">¿Qué buscas?</label>
+          <p class="empty" id="catalog-help">Usa este formulario si ya has buscado el modelo y no aparece en el catálogo.</p>
+          <div class="row">
+            <input id="item" maxlength="80" placeholder="Ej: Ferrari 308" list="suggest" autocomplete="off" aria-describedby="catalog-help" required>
+            <datalist id="suggest"></datalist>
+            <button type="submit">Apuntar</button>
+          </div>
+          <details class="notes-input" id="notes-input">
+            <summary>Notas opcionales</summary>
+            <label for="notes">Notas visibles para el grupo</label>
+            <textarea id="notes" rows="2" maxlength="300" placeholder="Color, variante o referencia"></textarea>
+          </details>
+          <p class="msg" id="add-msg" role="alert"></p>
+        </form>
+      </details>
     </section>
 
     <section id="view-group" aria-labelledby="group-title" hidden>
@@ -333,6 +351,7 @@ const SUPABASE_ANON_KEY = "sb_publishable_JmETs8eQXGnYfym5zQHbsg_5geHYf_b";
 const DEFAULT_CATEGORIES = [
   { id: "basicos",        label: "🚗 Básicos" },
   { id: "team_transport", label: "🚛 Team Transport" },
+  { id: "silver",         label: "Silver Series" },
   { id: "premium",        label: "💛 Premium" },
   { id: "collector",      label: "🔴 Collector" },
   { id: "reservas",       label: "🔰 Reservas" }
@@ -347,6 +366,7 @@ let categories = DEFAULT_CATEGORIES;
 let loadSequence = 0;
 let products = [];    // catalog of products (can have nobody looking for them)
 const mainline = new Map();
+const completedGuides = new Set();
 const mainlineLoading = new Set();
 const MAINLINE_PAGE_SIZE = 20;
 let mainlineLimit = MAINLINE_PAGE_SIZE;
@@ -422,7 +442,8 @@ async function logout() {
   $("notes-input").open = false;
   $("admin-nav").hidden = true;
   showView("mine");
-  showAddForm(false);
+  $("manual-entry").open = false;
+  $("catalog-guide").hidden = true;
   $("section-form").reset();
   $("product-form").reset();
   $("lists").replaceChildren();
@@ -607,18 +628,20 @@ function searchKey(value) {
   return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
 }
 
-async function loadMainline() {
-  const year = $("mainline-year").value;
+async function loadMainline(year = $("mainline-year").value) {
   if (mainline.has(year)) return renderMainline();
-  $("mainline-status").textContent = "Cargando catálogo de " + year + "…";
-  $("mainline-results").replaceChildren();
-  $("mainline-more").hidden = true;
+  if ($("mainline-year").value === year) {
+    $("mainline-status").textContent = "Cargando catálogo de " + year + "…";
+    $("mainline-results").replaceChildren();
+    $("mainline-more").hidden = true;
+  }
   if (mainlineLoading.has(year)) return;
   mainlineLoading.add(year);
   try {
     const response = await fetch("data/mainline-" + year + ".json");
     if (!response.ok) throw new Error("No se pudo leer el catálogo");
     mainline.set(year, await response.json());
+    if (me) renderMine();
     if ($("mainline-year").value === year) renderMainline();
   } catch {
     if ($("mainline-year").value === year) {
@@ -627,6 +650,12 @@ async function loadMainline() {
   } finally {
     mainlineLoading.delete(year);
   }
+}
+
+function catalogItem(model, year) {
+  const number = model.number ? "#" + String(model.number).padStart(3, "0") : "";
+  const reference = model.sku || number;
+  return model.name + " · " + year + (reference ? " " + reference : "");
 }
 
 function renderMainline() {
@@ -654,11 +683,11 @@ function renderMainline() {
   $("mainline-more").hidden = matches.length <= mainlineLimit;
   $("mainline-results").replaceChildren(...matches.slice(0, mainlineLimit).map((model) => {
     const number = model.number ? "#" + String(model.number).padStart(3, "0") : "";
-    const item = model.name + " · " + year + (model.sku || number ? " " + (model.sku || number) : "");
+    const item = catalogItem(model, year);
     const details = [number && number + "/250", model.series, model.wave, model.sku].filter(Boolean);
     const alreadyOpen = own.has(searchKey(item));
     const button = h("button", {
-      type: "button", class: "ghost small", disabled: alreadyOpen,
+      type: "button", class: "ghost small", disabled: alreadyOpen || !categories.some((cat) => cat.id === category),
       onclick: async () => {
         button.disabled = true;
         try {
@@ -668,7 +697,7 @@ function renderMainline() {
           button.disabled = false;
         }
       }
-    }, alreadyOpen ? "Apuntado" : "+ Apuntarme");
+    }, alreadyOpen ? "Apuntado" : categories.some((cat) => cat.id === category) ? "+ Apuntarme" : "Sección no disponible");
     return h("li", { class: "item search-entry" }, catalogThumbnail(model),
       h("div", {}, h("div", { class: "item-name" }, model.name),
         h("span", { class: "count" }, details.join(" · ")),
@@ -721,15 +750,34 @@ for (const button of $("app-nav").children) {
   button.addEventListener("click", () => showView(button.dataset.view));
 }
 
-function showAddForm(open) {
-  $("add-form").hidden = !open;
-  $("add-toggle").setAttribute("aria-expanded", open);
-  $("add-toggle").textContent = open ? "Cerrar formulario" : "+ Nueva búsqueda";
+$("open-catalog").addEventListener("click", () => {
+  showView("catalog");
+  $("mainline-query").focus();
+});
+
+function guideKey(id) {
+  return "hotwheels.catalogGuide." + id;
 }
 
-$("add-toggle").addEventListener("click", () => {
-  showAddForm($("add-form").hidden);
-  if (!$("add-form").hidden) $("item").focus();
+function hasSeenGuide(id) {
+  if (completedGuides.has(id)) return true;
+  try {
+    return localStorage.getItem(guideKey(id)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+$("guide-done").addEventListener("click", () => {
+  if (!me) return;
+  completedGuides.add(me.id);
+  try {
+    localStorage.setItem(guideKey(me.id), "1");
+  } catch {
+    // The acknowledgement still lasts for this page session.
+  }
+  $("catalog-guide").hidden = true;
+  $("mainline-query").focus();
 });
 
 function renderMine() {
@@ -742,9 +790,17 @@ function renderMine() {
     return;
   }
   const labels = new Map(categories.map((cat) => [cat.id, cat.label]));
+  const photos = new Map();
+  for (const [year, models] of mainline) {
+    for (const model of models) {
+      if (model.image) photos.set((model.category || "basicos") + "|" + searchKey(catalogItem(model, year)), model);
+    }
+  }
   for (const w of pending) {
+    const model = photos.get(w.category + "|" + searchKey(w.item));
     list.append(h("div", { class: "item search-entry" },
-      h("div", {}, h("div", { class: "item-name" }, w.item),
+      catalogThumbnail(model || { name: w.item }),
+      h("div", { class: "search-copy" }, h("div", { class: "item-name" }, w.item),
         h("span", { class: "count" }, labels.get(w.category) || w.category),
         w.notes ? h("p", { class: "note" }, w.notes) : ""),
       h("div", { class: "search-actions" }, h("button", {
@@ -907,9 +963,16 @@ async function boot() {
   who.hidden = false;
 
   $("admin-nav").hidden = !me.is_admin;
-  showView("mine");
+  const firstVisit = !hasSeenGuide(me.id);
+  $("catalog-guide").hidden = !firstVisit;
+  showView(firstVisit ? "catalog" : "mine");
   await loadWants();
-  if (me && !recovering) $("app").hidden = false;
+  if (me && !recovering) {
+    $("app").hidden = false;
+    for (const year of ["2026", "2027"]) {
+      if (wants.some((w) => w.user_id === me.id && w.status === "open" && w.item.includes(" · " + year + " "))) loadMainline(year);
+    }
+  }
 }
 
 // Refresh when coming back to the tab, and every 30s while visible
