@@ -132,6 +132,9 @@
   #view-found .view-header { border-top: 4px solid #bcd9ef; }
   .search-entry > div { min-width: 0; overflow-wrap: anywhere; }
   .search-entry .count { display: block; margin-left: 0; }
+  .catalog-results { list-style: none; padding: 0; margin: 8px 0 0; }
+  .catalog-links { margin: 10px 0 0; font-size: .88rem; }
+  .catalog-links a { color: var(--ink); }
   .person-models { margin: 6px 0; padding-left: 20px; }
   @media (max-width: 480px) {
     main { padding: 12px; }
@@ -247,6 +250,18 @@
         <h2 id="catalog-title">Catálogo</h2>
         <p>Explora las categorías y apúntate a los modelos que buscas.</p>
       </div>
+      <section class="card" aria-labelledby="mainline-title">
+        <h2 id="mainline-title">Básicos 2026</h2>
+        <label for="mainline-query">Buscar por modelo, serie o número de colección</label>
+        <input id="mainline-query" type="search" placeholder="Ej. Porsche, Cool Classics o 250" autocomplete="off">
+        <p id="mainline-status" class="empty" role="status"></p>
+        <ul class="catalog-results" id="mainline-results"></ul>
+        <button id="mainline-more" type="button" class="ghost small" hidden>Mostrar más modelos</button>
+        <p class="catalog-links">
+          <a href="https://community.creations.mattel.com/news/hot-wheels/public-news-stories/download-the-2026-hot-wheels-full-year-poster-wave-4-r2280/" target="_blank" rel="noopener noreferrer">Ver el póster de Mattel</a>
+          · <a href="https://munclemikes.com/pages/hot-wheels-complete-casting-list-of-cars-2026" target="_blank" rel="noopener noreferrer">Fuente de la lista</a>
+        </p>
+      </section>
       <div class="toolbar" role="group" aria-label="Vista de secciones">
         <button type="button" class="ghost" id="expand-all">Expandir todo</button>
         <button type="button" class="ghost" id="collapse-all">Contraer todo</button>
@@ -295,6 +310,10 @@ let wants = [];       // all wants (open + found)
 let categories = DEFAULT_CATEGORIES;
 let loadSequence = 0;
 let products = [];    // catalog of products (can have nobody looking for them)
+let mainline = null;
+let mainlineLoading = false;
+const MAINLINE_PAGE_SIZE = 20;
+let mainlineLimit = MAINLINE_PAGE_SIZE;
 let mode = "login";   // login | register
 
 // ---------- tiny DOM helper (uses textContent, so user text is never HTML) ----------
@@ -374,6 +393,9 @@ async function logout() {
   $("group-list").replaceChildren();
   $("group-count").textContent = "";
   $("mine-list").replaceChildren();
+  $("mainline-query").value = "";
+  $("mainline-results").replaceChildren();
+  mainlineLimit = MAINLINE_PAGE_SIZE;
   $("found-list").replaceChildren();
   for (const id of ["add-msg", "section-msg", "product-msg"]) setMsg(id, "");
   showAuth();
@@ -527,6 +549,70 @@ function updateSuggestions() {
 }
 $("category").addEventListener("change", updateSuggestions);
 
+function searchKey(value) {
+  return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
+}
+
+async function loadMainline() {
+  if (mainlineLoading) return;
+  if (mainline) return renderMainline();
+  mainlineLoading = true;
+  $("mainline-status").textContent = "Cargando catálogo de 2026…";
+  try {
+    const response = await fetch("data/mainline-2026.json");
+    if (!response.ok) throw new Error("No se pudo leer el catálogo");
+    mainline = await response.json();
+    if (me) renderMainline();
+  } catch {
+    $("mainline-status").textContent = "No se pudo cargar el catálogo de 2026. Vuelve a abrir Catálogo para reintentar.";
+  } finally {
+    mainlineLoading = false;
+  }
+}
+
+function renderMainline() {
+  if (!mainline || !me) return;
+  const query = searchKey($("mainline-query").value);
+  const tokens = query.split(/\s+/);
+  const numberQuery = query.match(/^#?(\d{1,3})(?:\/250)?$/);
+  const matches = mainline.filter((model) => numberQuery
+    ? model.number === Number(numberQuery[1])
+    : tokens.every((token) => searchKey(model.name + " " + model.series).includes(token)));
+  const own = new Set(wants.filter((w) => w.user_id === me.id && w.status === "open" && w.category === "basicos")
+    .map((w) => searchKey(w.item)));
+  $("mainline-status").textContent = matches.length === 1 ? "1 modelo" : matches.length + " modelos";
+  $("mainline-more").hidden = matches.length <= mainlineLimit;
+  $("mainline-results").replaceChildren(...matches.slice(0, mainlineLimit).map((model) => {
+    const number = String(model.number).padStart(3, "0");
+    const item = model.name + " · 2026 #" + number;
+    const alreadyOpen = own.has(searchKey(item));
+    const button = h("button", {
+      type: "button", class: "ghost small", disabled: alreadyOpen,
+      onclick: async () => {
+        button.disabled = true;
+        try {
+          const error = await addWant("basicos", item);
+          if (error) alert(error);
+        } finally {
+          button.disabled = false;
+        }
+      }
+    }, alreadyOpen ? "Apuntado" : "+ Apuntarme");
+    return h("li", { class: "item search-entry" },
+      h("div", {}, h("div", { class: "item-name" }, model.name),
+        h("span", { class: "count" }, "#" + number + "/250 · " + model.series)), button);
+  }));
+}
+
+$("mainline-query").addEventListener("input", () => {
+  mainlineLimit = MAINLINE_PAGE_SIZE;
+  renderMainline();
+});
+$("mainline-more").addEventListener("click", () => {
+  mainlineLimit += MAINLINE_PAGE_SIZE;
+  renderMainline();
+});
+
 function showView(view) {
   if (view === "admin" && !me?.is_admin) return;
   for (const button of $("app-nav").children) {
@@ -535,6 +621,7 @@ function showView(view) {
     if (active) button.setAttribute("aria-current", "page");
     else button.removeAttribute("aria-current");
   }
+  if (view === "catalog") loadMainline();
 }
 
 for (const button of $("app-nav").children) {
@@ -607,6 +694,7 @@ function render() {
   updateSuggestions();
   renderGroup();
   renderMine();
+  if (!$("view-catalog").hidden) renderMainline();
   const lists = $("lists");
   const previous = new Map(Array.from(lists.children, (section) => [section.dataset.category, section.open]));
   lists.replaceChildren();
