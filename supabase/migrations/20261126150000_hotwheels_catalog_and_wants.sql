@@ -1,5 +1,3 @@
-begin;
-
 alter table public.wants
   add column if not exists notes text
   check (char_length(notes) <= 300);
@@ -97,5 +95,3 @@ $$;
 drop trigger if exists guard_profile_admin on public.profiles;
 create trigger guard_profile_admin before insert or update on public.profiles
   for each row execute function public.guard_profile_admin();
-
-commit;
