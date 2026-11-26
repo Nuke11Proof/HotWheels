@@ -160,7 +160,8 @@
       </div>
       <label for="item">¿Qué buscas?</label>
       <div class="row">
-        <input id="item" maxlength="80" placeholder="Ej: Ferrari 308" required>
+        <input id="item" maxlength="80" placeholder="Ej: Ferrari 308" list="suggest" autocomplete="off" required>
+        <datalist id="suggest"></datalist>
         <button type="submit">Apuntar</button>
       </div>
       <p class="msg" id="add-msg" role="alert"></p>
@@ -195,6 +196,7 @@ const $ = (id) => document.getElementById(id);
 
 let me = null;        // profile row of the current user
 let wants = [];       // all wants (open + found)
+let products = [];    // catalog of products (can have nobody looking for them)
 let mode = "login";   // login | register
 
 // ---------- tiny DOM helper (uses textContent, so user text is never HTML) ----------
@@ -322,6 +324,8 @@ async function loadWants() {
     .order("created_at", { ascending: true });
   if (error) { console.error(error); return; }
   wants = data;
+  const pr = await sb.from("products").select("*").order("id");
+  products = pr.error ? [] : pr.data;
   render();
 }
 
@@ -348,7 +352,19 @@ async function deleteWant(id) {
 }
 
 // ---------- RENDER ----------
+function updateSuggestions() {
+  const cat = $("category").value;
+  const names = new Map();
+  for (const p of products) if (p.category === cat) names.set(p.name.trim().toLowerCase(), p.name.trim());
+  for (const w of wants) if (w.category === cat && w.status === "open") names.set(w.item.trim().toLowerCase(), w.item.trim());
+  const dl = $("suggest");
+  dl.replaceChildren();
+  for (const n of names.values()) dl.append(h("option", { value: n }));
+}
+$("category").addEventListener("change", updateSuggestions);
+
 function render() {
+  updateSuggestions();
   const lists = $("lists");
   lists.replaceChildren();
 
@@ -356,10 +372,13 @@ function render() {
     const open = wants.filter((w) => w.category === cat.id && w.status === "open");
     const card = h("section", { class: "card" }, h("h2", {}, cat.label));
 
-    if (!open.length) {
+    const groups = new Map();
+    for (const p of products.filter((p) => p.category === cat.id)) {
+      groups.set(p.name.trim().toLowerCase(), { name: p.name.trim(), rows: [], productId: p.id });
+    }
+    if (!open.length && !groups.size) {
       card.append(h("p", { class: "empty" }, "Nadie busca nada aquí todavía."));
     } else {
-      const groups = new Map();
       for (const w of open) {
         const key = w.item.trim().toLowerCase();
         if (!groups.has(key)) groups.set(key, { name: w.item.trim(), rows: [] });
@@ -389,7 +408,18 @@ function render() {
           chips.append(h("button", {
             type: "button", class: "ghost small",
             onclick: async () => { const err = await addWant(cat.id, g.name); if (err) alert(err); }
-          }, "+ Yo también"));
+          }, g.rows.length ? "+ Yo también" : "+ Apuntarme"));
+        }
+        if (!g.rows.length && g.productId && me.is_admin) {
+          chips.append(h("button", {
+            type: "button", class: "ghost small",
+            onclick: async () => {
+              if (!confirm("¿Quitar «" + g.name + "» del catálogo?")) return;
+              const { error } = await sb.from("products").delete().eq("id", g.productId);
+              if (error) alert(niceError(error));
+              await loadWants();
+            }
+          }, "Quitar del catálogo"));
         }
         card.append(h("div", { class: "item" }, h("div", { class: "item-name" }, g.name), chips));
       }
