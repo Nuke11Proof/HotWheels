@@ -114,6 +114,29 @@
   .notes-input { margin-top: 10px; }
   .admin-form + .admin-form { border-top: 1px solid var(--line); padding-top: 8px; }
   .admin-form button { margin-top: 8px; }
+  :root { color-scheme: light dark; }
+  body { background: linear-gradient(155deg, var(--bg) 45%, color-mix(in srgb, var(--bg), var(--flame) 14%)); min-height: 100vh; }
+  main { max-width: 980px; padding: 24px 16px; }
+  header { padding: 8px 0; }
+  h1 { font-family: system-ui, sans-serif; font-size: clamp(1.35rem, 4vw, 2rem); font-weight: 800; }
+  .app-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+  .app-nav button { background: var(--card); color: var(--ink); border: 1px solid var(--line); padding: 8px 12px; }
+  .app-nav button[aria-current="page"] { background: var(--flame); color: var(--flame-ink); border-color: var(--flame); }
+  .view-header { padding: 18px; margin-bottom: 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
+  .view-header h2 { margin: 0; padding: 0; border: 0; font-size: clamp(1.25rem, 3vw, 1.55rem); }
+  .view-header p { margin: 4px 0 0; color: var(--muted); }
+  .view-header.has-action, .search-entry { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; }
+  #view-mine .view-header { border-top: 4px solid var(--mine); }
+  #view-group .view-header { border-top: 4px solid #e8bbd5; }
+  #view-catalog .view-header, #view-admin .view-header { border-top: 4px solid var(--flame); }
+  #view-found .view-header { border-top: 4px solid #bcd9ef; }
+  .search-entry > div { min-width: 0; overflow-wrap: anywhere; }
+  .search-entry .count { display: block; margin-left: 0; }
+  .person-models { margin: 6px 0; padding-left: 20px; }
+  @media (max-width: 480px) {
+    main { padding: 12px; }
+    .app-nav button { flex: 1 0 auto; }
+  }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -158,57 +181,94 @@
 
   <!-- APP -->
   <section id="app" hidden>
-    <form id="add-form" class="card">
-      <div class="row">
-        <div>
-          <label for="category">Categoría</label>
-          <select id="category"></select>
-        </div>
-      </div>
-      <label for="item">¿Qué buscas?</label>
-      <p class="empty" id="catalog-help">Por ahora hay pocos modelos en el catálogo. Los administradores irán añadiendo más. Si el tuyo no aparece, puedes escribirlo.</p>
-      <div class="row">
-        <input id="item" maxlength="80" placeholder="Ej: Ferrari 308" list="suggest" autocomplete="off" aria-describedby="catalog-help" required>
-        <datalist id="suggest"></datalist>
-        <button type="submit">Apuntar</button>
-      </div>
-      <details class="notes-input" id="notes-input">
-        <summary>Notas opcionales</summary>
-        <label for="notes">Notas visibles para el grupo</label>
-        <textarea id="notes" rows="2" maxlength="300" placeholder="Color, variante o referencia"></textarea>
-      </details>
-      <p class="msg" id="add-msg" role="alert"></p>
-    </form>
-
-    <details class="card" id="admin" hidden>
-      <summary>Administración</summary>
-      <form class="admin-form" id="section-form">
-        <label for="section-name">Nombre de la nueva sección</label>
-        <input id="section-name" maxlength="60" required>
-        <button type="submit">Crear sección</button>
-        <p class="msg" id="section-msg" role="status"></p>
-      </form>
-      <form class="admin-form" id="product-form">
-        <label for="product-section">Sección del producto</label>
-        <select id="product-section" required></select>
-        <label for="product-name">Nombre del producto</label>
-        <input id="product-name" maxlength="80" required>
-        <button type="submit">Añadir al catálogo</button>
-        <p class="msg" id="product-msg" role="status"></p>
-      </form>
-    </details>
-
-    <div class="toolbar" role="group" aria-label="Vista de secciones">
-      <button type="button" class="ghost" id="expand-all">Expandir todo</button>
-      <button type="button" class="ghost" id="collapse-all">Contraer todo</button>
-    </div>
+    <nav class="app-nav" id="app-nav" aria-label="Apartados de Lista Hot Wheels">
+      <button type="button" data-view="mine" aria-controls="view-mine" aria-current="page">Mis búsquedas</button>
+      <button type="button" data-view="group" aria-controls="view-group">Grupo</button>
+      <button type="button" data-view="catalog" aria-controls="view-catalog">Catálogo</button>
+      <button type="button" data-view="found" aria-controls="view-found">Encontrados</button>
+      <button type="button" data-view="admin" aria-controls="view-admin" id="admin-nav" hidden>Administración</button>
+    </nav>
     <p class="msg" id="list-msg" role="status" hidden></p>
-    <div id="lists"></div>
 
-    <details class="card" id="found-box">
-      <summary>Ya encontrados</summary>
-      <div id="found-list"></div>
-    </details>
+    <section id="view-mine" aria-labelledby="mine-title">
+      <div class="view-header has-action">
+        <div>
+          <h2 id="mine-title">Mis búsquedas</h2>
+          <p id="mine-count"></p>
+        </div>
+        <button type="button" id="add-toggle" aria-controls="add-form" aria-expanded="false">+ Nueva búsqueda</button>
+      </div>
+      <form id="add-form" class="card" hidden>
+        <div class="row">
+          <div>
+            <label for="category">Categoría</label>
+            <select id="category"></select>
+          </div>
+        </div>
+        <label for="item">¿Qué buscas?</label>
+        <p class="empty" id="catalog-help">Por ahora hay pocos modelos en el catálogo. Los administradores irán añadiendo más. Si el tuyo no aparece, puedes escribirlo.</p>
+        <div class="row">
+          <input id="item" maxlength="80" placeholder="Ej: Ferrari 308" list="suggest" autocomplete="off" aria-describedby="catalog-help" required>
+          <datalist id="suggest"></datalist>
+          <button type="submit">Apuntar</button>
+        </div>
+        <details class="notes-input" id="notes-input">
+          <summary>Notas opcionales</summary>
+          <label for="notes">Notas visibles para el grupo</label>
+          <textarea id="notes" rows="2" maxlength="300" placeholder="Color, variante o referencia"></textarea>
+        </details>
+        <p class="msg" id="add-msg" role="alert"></p>
+      </form>
+      <div class="card" id="mine-list"></div>
+    </section>
+
+    <section id="view-admin" aria-labelledby="admin-title" hidden>
+      <div class="view-header"><h2 id="admin-title">Administración</h2></div>
+      <div class="card">
+        <form class="admin-form" id="section-form">
+          <label for="section-name">Nombre de la nueva sección</label>
+          <input id="section-name" maxlength="60" required>
+          <button type="submit">Crear sección</button>
+          <p class="msg" id="section-msg" role="status"></p>
+        </form>
+        <form class="admin-form" id="product-form">
+          <label for="product-section">Sección del producto</label>
+          <select id="product-section" required></select>
+          <label for="product-name">Nombre del producto</label>
+          <input id="product-name" maxlength="80" required>
+          <button type="submit">Añadir al catálogo</button>
+          <p class="msg" id="product-msg" role="status"></p>
+        </form>
+      </div>
+    </section>
+
+    <section id="view-catalog" aria-labelledby="catalog-title" hidden>
+      <div class="view-header">
+        <h2 id="catalog-title">Catálogo</h2>
+        <p>Explora las categorías y apúntate a los modelos que buscas.</p>
+      </div>
+      <div class="toolbar" role="group" aria-label="Vista de secciones">
+        <button type="button" class="ghost" id="expand-all">Expandir todo</button>
+        <button type="button" class="ghost" id="collapse-all">Contraer todo</button>
+      </div>
+      <div id="lists"></div>
+    </section>
+
+    <section id="view-group" aria-labelledby="group-title" hidden>
+      <div class="view-header">
+        <h2 id="group-title">Quién busca qué</h2>
+        <p id="group-count"></p>
+      </div>
+      <div class="card" id="group-list"></div>
+    </section>
+
+    <section id="view-found" aria-labelledby="found-title" hidden>
+      <div class="view-header">
+        <h2 id="found-title">Encontrados</h2>
+        <p>Últimos modelos que el grupo ha marcado como encontrados.</p>
+      </div>
+      <div class="card" id="found-list"></div>
+    </section>
   </section>
 </main>
 
@@ -296,7 +356,7 @@ $("auth-form").addEventListener("submit", async (e) => {
     res = await sb.auth.signUp({ email, password, options: { data: { nickname } } });
   }
   if (res.error) return setMsg("auth-msg", niceError(res.error));
-  if (!res.data.session) return setMsg("auth-msg", "Cuenta creada, pero Supabase pide confirmar el email. Desactiva «Confirm email» en Authentication → Providers → Email.");
+  if (!res.data.session) return setMsg("auth-msg", "Cuenta creada. Revisa tu correo y sigue el enlace de confirmación para entrar.");
   await boot();
 });
 
@@ -305,13 +365,16 @@ async function logout() {
   me = null; wants = []; products = []; categories = DEFAULT_CATEGORIES;
   $("add-form").reset();
   $("notes-input").open = false;
-  $("admin").open = false;
-  $("admin").hidden = true;
+  $("admin-nav").hidden = true;
+  showView("mine");
+  showAddForm(false);
   $("section-form").reset();
   $("product-form").reset();
   $("lists").replaceChildren();
+  $("group-list").replaceChildren();
+  $("group-count").textContent = "";
+  $("mine-list").replaceChildren();
   $("found-list").replaceChildren();
-  $("found-box").open = false;
   for (const id of ["add-msg", "section-msg", "product-msg"]) setMsg(id, "");
   showAuth();
 }
@@ -405,7 +468,6 @@ function renderNote(w, nick) {
 for (const [id, open] of [["expand-all", true], ["collapse-all", false]]) {
   $(id).addEventListener("click", () => {
     for (const section of $("lists").children) section.open = open;
-    $("found-box").open = open;
   });
 }
 
@@ -465,8 +527,86 @@ function updateSuggestions() {
 }
 $("category").addEventListener("change", updateSuggestions);
 
+function showView(view) {
+  if (view === "admin" && !me?.is_admin) return;
+  for (const button of $("app-nav").children) {
+    const active = button.dataset.view === view;
+    $("view-" + button.dataset.view).hidden = !active;
+    if (active) button.setAttribute("aria-current", "page");
+    else button.removeAttribute("aria-current");
+  }
+}
+
+for (const button of $("app-nav").children) {
+  button.addEventListener("click", () => showView(button.dataset.view));
+}
+
+function showAddForm(open) {
+  $("add-form").hidden = !open;
+  $("add-toggle").setAttribute("aria-expanded", open);
+  $("add-toggle").textContent = open ? "Cerrar formulario" : "+ Nueva búsqueda";
+}
+
+$("add-toggle").addEventListener("click", () => {
+  showAddForm($("add-form").hidden);
+  if (!$("add-form").hidden) $("item").focus();
+});
+
+function renderMine() {
+  const pending = wants.filter((w) => w.user_id === me.id && w.status === "open");
+  $("mine-count").textContent = pending.length === 1 ? "1 búsqueda pendiente" : pending.length + " búsquedas pendientes";
+  const list = $("mine-list");
+  list.replaceChildren();
+  if (!pending.length) {
+    list.append(h("p", { class: "empty" }, "Todavía no tienes búsquedas pendientes. Añade un modelo o apúntate desde el catálogo."));
+    return;
+  }
+  const labels = new Map(categories.map((cat) => [cat.id, cat.label]));
+  for (const w of pending) {
+    list.append(h("div", { class: "item search-entry" },
+      h("div", {}, h("div", { class: "item-name" }, w.item),
+        h("span", { class: "count" }, labels.get(w.category) || w.category),
+        w.notes ? h("p", { class: "note" }, w.notes) : ""),
+      h("button", {
+        type: "button", class: "ghost small", "aria-label": "Marcar " + w.item + " como encontrado",
+        onclick: () => { if (confirm("¿Marcar «" + w.item + "» como encontrado?")) setStatus(w.id, "found"); }
+      }, "✓ Encontrado")
+    ));
+  }
+}
+
+function renderGroup() {
+  const box = $("group-list");
+  const labels = new Map(categories.map((cat) => [cat.id, cat.label]));
+  const people = new Map();
+  for (const want of wants) {
+    if (want.status !== "open") continue;
+    if (!people.has(want.user_id)) {
+      const own = want.user_id === me.id;
+      const name = own ? me.nickname + " (tú)" : want.profiles?.nickname || "Miembro del grupo";
+      people.set(want.user_id, { name, searches: [] });
+    }
+    people.get(want.user_id).searches.push(want);
+  }
+
+  $("group-count").textContent = people.size === 1 ? "1 persona" : people.size + " personas";
+  box.replaceChildren();
+  if (!people.size) {
+    box.append(h("p", { class: "empty" }, "Todavía no hay búsquedas pendientes."));
+    return;
+  }
+  for (const person of [...people.values()].sort((a, b) => a.name.localeCompare(b.name, "es"))) {
+    const items = h("ul", { class: "person-models" }, ...person.searches.map((want) =>
+      h("li", {}, want.item, h("span", { class: "count" }, labels.get(want.category) || want.category))
+    ));
+    box.append(h("div", { class: "item" }, h("div", { class: "item-name" }, person.name), items));
+  }
+}
+
 function render() {
   updateSuggestions();
+  renderGroup();
+  renderMine();
   const lists = $("lists");
   const previous = new Map(Array.from(lists.children, (section) => [section.dataset.category, section.open]));
   lists.replaceChildren();
@@ -474,7 +614,7 @@ function render() {
   for (const cat of categories) {
     const open = wants.filter((w) => w.category === cat.id && w.status === "open");
     const card = h("details", { class: "card", "data-category": cat.id, open: previous.get(cat.id) ?? true });
-    card.append(h("summary", {}, cat.label, h("span", { class: "count" }, String(open.length) + " pendientes")));
+    card.append(h("summary", {}, cat.label, h("span", { class: "count" }, open.length === 1 ? "1 pendiente" : open.length + " pendientes")));
 
     const groups = new Map();
     for (const p of products.filter((p) => p.category === cat.id)) {
@@ -590,7 +730,8 @@ async function boot() {
   );
   who.hidden = false;
 
-  $("admin").hidden = !me.is_admin;
+  $("admin-nav").hidden = !me.is_admin;
+  showView("mine");
   await loadWants();
   if (me && !recovering) $("app").hidden = false;
 }
