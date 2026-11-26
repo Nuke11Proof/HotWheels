@@ -4,6 +4,28 @@ alter table public.wants
   add column if not exists notes text
   check (char_length(notes) <= 300);
 
+alter table public.wants enable row level security;
+grant select on public.wants to authenticated;
+
+drop policy if exists wants_group_read on public.wants;
+create policy wants_group_read on public.wants for select to authenticated
+  using (true);
+
+-- Las políticas restrictivas limitan también los permisos concedidos por
+-- políticas anteriores, incluidas las de administración.
+drop policy if exists wants_own_insert_only on public.wants;
+create policy wants_own_insert_only on public.wants as restrictive for insert to authenticated
+  with check (user_id = (select auth.uid()));
+
+drop policy if exists wants_own_update_only on public.wants;
+create policy wants_own_update_only on public.wants as restrictive for update to authenticated
+  using (user_id = (select auth.uid()))
+  with check (user_id = (select auth.uid()));
+
+drop policy if exists wants_own_delete_only on public.wants;
+create policy wants_own_delete_only on public.wants as restrictive for delete to authenticated
+  using (user_id = (select auth.uid()));
+
 create table if not exists public.categories (
   id text primary key default gen_random_uuid()::text,
   label text not null check (char_length(btrim(label)) between 1 and 60),

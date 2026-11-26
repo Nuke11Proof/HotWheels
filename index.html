@@ -166,8 +166,9 @@
         </div>
       </div>
       <label for="item">¿Qué buscas?</label>
+      <p class="empty" id="catalog-help">Por ahora hay pocos modelos en el catálogo. Los administradores irán añadiendo más. Si el tuyo no aparece, puedes escribirlo.</p>
       <div class="row">
-        <input id="item" maxlength="80" placeholder="Ej: Ferrari 308" list="suggest" autocomplete="off" required>
+        <input id="item" maxlength="80" placeholder="Ej: Ferrari 308" list="suggest" autocomplete="off" aria-describedby="catalog-help" required>
         <datalist id="suggest"></datalist>
         <button type="submit">Apuntar</button>
       </div>
@@ -441,13 +442,13 @@ async function setStatus(id, status) {
   const patch = status === "found"
     ? { status, closed_at: new Date().toISOString() }
     : { status, closed_at: null };
-  const { error } = await sb.from("wants").update(patch).eq("id", id);
+  const { error } = await sb.from("wants").update(patch).eq("id", id).eq("user_id", me.id);
   if (error) alert(niceError(error));
   await loadWants();
 }
 
 async function deleteWant(id) {
-  const { error } = await sb.from("wants").delete().eq("id", id);
+  const { error } = await sb.from("wants").delete().eq("id", id).eq("user_id", me.id);
   if (error) alert(niceError(error));
   await loadWants();
 }
@@ -493,13 +494,13 @@ function render() {
           const mine = w.user_id === me.id;
           const nick = (w.profiles && w.profiles.nickname) || "?";
           const chip = h("span", { class: "chip" + (mine ? " mine" : "") }, nick);
-          if (mine || me.is_admin) {
+          if (mine) {
             chip.append(h("button", {
               type: "button", title: "Marcar como encontrado", "aria-label": "Encontrado: " + nick,
               onclick: () => { if (confirm("¿Marcar «" + g.name + "» de " + nick + " como encontrado?")) setStatus(w.id, "found"); }
             }, "✓"));
           }
-          if (me.is_admin) {
+          if (mine && me.is_admin) {
             chip.append(h("button", {
               type: "button", title: "Borrar definitivamente", "aria-label": "Borrar: " + nick,
               onclick: () => { if (confirm("¿Borrar definitivamente la entrada de " + nick + "?")) deleteWant(w.id); }
@@ -544,7 +545,7 @@ function render() {
     const d = w.closed_at ? new Date(w.closed_at).toLocaleDateString("es-ES") : "";
     const line = h("div", { class: "found-line" },
       h("div", {}, w.item + " — " + nick + (d ? " (" + d + ")" : ""), renderNote(w, nick)));
-    if (w.user_id === me.id || me.is_admin) {
+    if (w.user_id === me.id) {
       line.append(h("button", {
         type: "button", class: "ghost small", title: "Volver a apuntar",
         onclick: () => setStatus(w.id, "open")
