@@ -6,31 +6,31 @@
 <title>Lista Hot Wheels</title>
 <style>
   :root {
-    --bg: #f2f1ee;
+    --bg: #f7f3fb;
     --card: #ffffff;
-    --ink: #1a1d24;
-    --muted: #6b7080;
-    --line: #dcdad4;
-    --flame: #e8470f;
-    --flame-ink: #ffffff;
-    --chip: #ffe9c2;
-    --chip-ink: #5a3500;
-    --mine: #ffd23f;
+    --ink: #28213a;
+    --muted: #645a73;
+    --line: #ddd4e8;
+    --flame: #decdf8;
+    --flame-ink: #28213a;
+    --chip: #f8dce8;
+    --chip-ink: #572d46;
+    --mine: #bde6d5;
     --ok: #1f8a4c;
     --danger: #c0262d;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #14161b;
-      --card: #1e2128;
+      --bg: #1e1929;
+      --card: #292236;
       --ink: #f1f0ec;
       --muted: #9aa0b0;
-      --line: #2e323c;
-      --flame: #ff6a2b;
-      --flame-ink: #1a1d24;
-      --chip: #3a2c14;
-      --chip-ink: #ffe2a8;
-      --mine: #ffd23f;
+      --line: #494057;
+      --flame: #decdf8;
+      --flame-ink: #28213a;
+      --chip: #513247;
+      --chip-ink: #ffdfed;
+      --mine: #bde6d5;
       --ok: #4cc27f;
       --danger: #ff6b70;
     }
@@ -63,8 +63,8 @@
     border-radius: 10px; padding: 14px; margin-bottom: 14px;
   }
   label { display: block; font-size: .85rem; color: var(--muted); margin: 10px 0 4px; }
-  input, select, button { font: inherit; }
-  input, select {
+  input, select, textarea, button { font: inherit; }
+  input, select, textarea {
     width: 100%; padding: 10px; border-radius: 8px;
     border: 1px solid var(--line); background: var(--bg); color: var(--ink);
   }
@@ -74,7 +74,7 @@
   }
   button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
   button.small { padding: 3px 8px; font-size: .8rem; }
-  button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-visible {
+  button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible {
     outline: 3px solid var(--mine); outline-offset: 2px;
   }
   .row { display: flex; gap: 8px; }
@@ -107,6 +107,13 @@
   .who { font-size: .85rem; color: var(--muted); text-align: right; }
   .who button { margin-top: 4px; }
   .badge { background: var(--flame); color: var(--flame-ink); border-radius: 4px; padding: 0 5px; font-size: .75rem; margin-left: 4px; }
+  textarea { resize: vertical; }
+  .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+  .count { margin-left: 6px; font-size: .82rem; color: var(--muted); font-weight: 400; }
+  .note { margin: 4px 0; font-size: .88rem; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .notes-input { margin-top: 10px; }
+  .admin-form + .admin-form { border-top: 1px solid var(--line); padding-top: 8px; }
+  .admin-form button { margin-top: 8px; }
   [hidden] { display: none !important; }
 </style>
 </head>
@@ -164,9 +171,37 @@
         <datalist id="suggest"></datalist>
         <button type="submit">Apuntar</button>
       </div>
+      <details class="notes-input" id="notes-input">
+        <summary>Notas opcionales</summary>
+        <label for="notes">Notas visibles para el grupo</label>
+        <textarea id="notes" rows="2" maxlength="300" placeholder="Color, variante o referencia"></textarea>
+      </details>
       <p class="msg" id="add-msg" role="alert"></p>
     </form>
 
+    <details class="card" id="admin" hidden>
+      <summary>Administración</summary>
+      <form class="admin-form" id="section-form">
+        <label for="section-name">Nombre de la nueva sección</label>
+        <input id="section-name" maxlength="60" required>
+        <button type="submit">Crear sección</button>
+        <p class="msg" id="section-msg" role="status"></p>
+      </form>
+      <form class="admin-form" id="product-form">
+        <label for="product-section">Sección del producto</label>
+        <select id="product-section" required></select>
+        <label for="product-name">Nombre del producto</label>
+        <input id="product-name" maxlength="80" required>
+        <button type="submit">Añadir al catálogo</button>
+        <p class="msg" id="product-msg" role="status"></p>
+      </form>
+    </details>
+
+    <div class="toolbar" role="group" aria-label="Vista de secciones">
+      <button type="button" class="ghost" id="expand-all">Expandir todo</button>
+      <button type="button" class="ghost" id="collapse-all">Contraer todo</button>
+    </div>
+    <p class="msg" id="list-msg" role="status" hidden></p>
     <div id="lists"></div>
 
     <details class="card" id="found-box">
@@ -183,7 +218,7 @@ const SUPABASE_URL = "https://jtsgvxxfvrecbyxpkbwe.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_JmETs8eQXGnYfym5zQHbsg_5geHYf_b";
 // =======================================================================
 
-const CATEGORIES = [
+const DEFAULT_CATEGORIES = [
   { id: "basicos",        label: "🚗 Básicos" },
   { id: "team_transport", label: "🚛 Team Transport" },
   { id: "premium",        label: "💛 Premium" },
@@ -196,6 +231,8 @@ const $ = (id) => document.getElementById(id);
 
 let me = null;        // profile row of the current user
 let wants = [];       // all wants (open + found)
+let categories = DEFAULT_CATEGORIES;
+let loadSequence = 0;
 let products = [];    // catalog of products (can have nobody looking for them)
 let mode = "login";   // login | register
 
@@ -264,7 +301,17 @@ $("auth-form").addEventListener("submit", async (e) => {
 
 async function logout() {
   await sb.auth.signOut();
-  me = null; wants = [];
+  me = null; wants = []; products = []; categories = DEFAULT_CATEGORIES;
+  $("add-form").reset();
+  $("notes-input").open = false;
+  $("admin").open = false;
+  $("admin").hidden = true;
+  $("section-form").reset();
+  $("product-form").reset();
+  $("lists").replaceChildren();
+  $("found-list").replaceChildren();
+  $("found-box").open = false;
+  for (const id of ["add-msg", "section-msg", "product-msg"]) setMsg(id, "");
   showAuth();
 }
 
@@ -318,22 +365,76 @@ async function loadProfile(userId) {
 }
 
 async function loadWants() {
-  const { data, error } = await sb
-    .from("wants")
-    .select("id,user_id,category,item,status,created_at,closed_at,profiles(nickname)")
-    .order("created_at", { ascending: true });
-  if (error) { console.error(error); return; }
-  wants = data;
-  const pr = await sb.from("products").select("*").order("id");
-  products = pr.error ? [] : pr.data;
+  const profile = me;
+  const sequence = ++loadSequence;
+  const [wr, pr, cr] = await Promise.all([
+    sb.from("wants").select("*,profiles(nickname)").order("created_at"),
+    sb.from("products").select("id,category,name").order("id"),
+    sb.from("categories").select("id,label").order("position").order("label")
+  ]);
+  if (me !== profile || sequence !== loadSequence) return;
+  $("list-msg").hidden = !wr.error && !pr.error && !cr.error;
+  setMsg("list-msg", wr.error || pr.error ? "No se ha podido actualizar toda la lista." :
+    cr.error ? "No se han podido cargar las secciones personalizadas." : "");
+  if (!wr.error) wants = wr.data;
+  if (!pr.error) products = pr.data;
+  if (!cr.error && cr.data.length) categories = cr.data;
+  for (const id of ["category", "product-section"]) {
+    const select = $(id);
+    const selected = select.value;
+    select.replaceChildren(...categories.map((cat) => h("option", { value: cat.id }, cat.label)));
+    if (categories.some((cat) => cat.id === selected)) select.value = selected;
+  }
   render();
 }
 
-async function addWant(category, item) {
-  const { error } = await sb.from("wants").insert({ category, item });
+async function addWant(category, item, notes = "") {
+  const values = { category, item };
+  if (notes) values.notes = notes;
+  const { error } = await sb.from("wants").insert(values);
   if (error) return niceError(error);
   await loadWants();
   return null;
+}
+
+function renderNote(w, nick) {
+  return w.notes ? h("p", { class: "note" }, nick + ": " + w.notes) : "";
+}
+
+for (const [id, open] of [["expand-all", true], ["collapse-all", false]]) {
+  $(id).addEventListener("click", () => {
+    for (const section of $("lists").children) section.open = open;
+    $("found-box").open = open;
+  });
+}
+
+for (const [type, table] of [["section", "categories"], ["product", "products"]]) {
+  $(type + "-form").addEventListener("submit", async (event) => {
+    event.preventDefault();
+    if (!me?.is_admin) return;
+    const field = $(type + "-name");
+    const name = field.value.trim();
+    if (!name) return setMsg(type + "-msg", "Escribe un nombre.");
+    const category = $("product-section").value;
+    const duplicate = type === "section"
+      ? categories.some((cat) => cat.label.replace(/^\p{Extended_Pictographic}\s*/u, "").toLowerCase() === name.toLowerCase())
+      : products.some((product) => product.category === category && product.name.trim().toLowerCase() === name.toLowerCase());
+    if (duplicate) return setMsg(type + "-msg", "Ese nombre ya existe aquí.");
+    const values = type === "section"
+      ? { label: name }
+      : { category, name };
+    const button = event.submitter;
+    if (button) button.disabled = true;
+    try {
+      const { error } = await sb.from(table).insert(values);
+      if (error) return setMsg(type + "-msg", error.code === "23505" ? "Ese nombre ya existe aquí." : error.message);
+      field.value = "";
+      setMsg(type + "-msg", type === "section" ? "Sección creada." : "Producto añadido al catálogo.", true);
+      await loadWants();
+    } finally {
+      if (button) button.disabled = false;
+    }
+  });
 }
 
 async function setStatus(id, status) {
@@ -366,11 +467,13 @@ $("category").addEventListener("change", updateSuggestions);
 function render() {
   updateSuggestions();
   const lists = $("lists");
+  const previous = new Map(Array.from(lists.children, (section) => [section.dataset.category, section.open]));
   lists.replaceChildren();
 
-  for (const cat of CATEGORIES) {
+  for (const cat of categories) {
     const open = wants.filter((w) => w.category === cat.id && w.status === "open");
-    const card = h("section", { class: "card" }, h("h2", {}, cat.label));
+    const card = h("details", { class: "card", "data-category": cat.id, open: previous.get(cat.id) ?? true });
+    card.append(h("summary", {}, cat.label, h("span", { class: "count" }, String(open.length) + " pendientes")));
 
     const groups = new Map();
     for (const p of products.filter((p) => p.category === cat.id)) {
@@ -421,7 +524,8 @@ function render() {
             }
           }, "Quitar del catálogo"));
         }
-        card.append(h("div", { class: "item" }, h("div", { class: "item-name" }, g.name), chips));
+        card.append(h("div", { class: "item" }, h("div", { class: "item-name" }, g.name), chips,
+          ...g.rows.map((w) => renderNote(w, w.profiles?.nickname || "?"))));
       }
     }
     lists.append(card);
@@ -439,7 +543,7 @@ function render() {
     const nick = (w.profiles && w.profiles.nickname) || "?";
     const d = w.closed_at ? new Date(w.closed_at).toLocaleDateString("es-ES") : "";
     const line = h("div", { class: "found-line" },
-      h("span", {}, w.item + " — " + nick + " (" + d + ")"));
+      h("div", {}, w.item + " — " + nick + (d ? " (" + d + ")" : ""), renderNote(w, nick)));
     if (w.user_id === me.id || me.is_admin) {
       line.append(h("button", {
         type: "button", class: "ghost small", title: "Volver a apuntar",
@@ -456,9 +560,11 @@ $("add-form").addEventListener("submit", async (e) => {
   setMsg("add-msg", "");
   const item = $("item").value.trim();
   if (!item) return;
-  const err = await addWant($("category").value, item);
+  const err = await addWant($("category").value, item, $("notes").value.trim());
   if (err) return setMsg("add-msg", err);
   $("item").value = "";
+  $("notes").value = "";
+  $("notes-input").open = false;
   setMsg("add-msg", "Apuntado ✓", true);
   setTimeout(() => setMsg("add-msg", ""), 2000);
 });
@@ -476,8 +582,6 @@ async function boot() {
     return showAuth();
   }
   $("auth").hidden = true;
-  $("app").hidden = false;
-
   const who = $("who");
   who.replaceChildren(
     h("div", {}, me.nickname, me.is_admin ? h("span", { class: "badge" }, "admin") : ""),
@@ -485,11 +589,9 @@ async function boot() {
   );
   who.hidden = false;
 
-  const sel = $("category");
-  if (!sel.options.length) {
-    for (const c of CATEGORIES) sel.append(h("option", { value: c.id }, c.label));
-  }
+  $("admin").hidden = !me.is_admin;
   await loadWants();
+  if (me && !recovering) $("app").hidden = false;
 }
 
 // Refresh when coming back to the tab, and every 30s while visible
