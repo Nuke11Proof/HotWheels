@@ -139,8 +139,8 @@
   #view-catalog .view-header, #view-admin .view-header { border-top: 4px solid var(--flame); }
   #view-found .view-header { border-top: 4px solid #bcd9ef; }
   #mine-list .search-entry, #group-list .search-entry { justify-content: flex-start; }
-  .group-layout { display: grid; grid-template-columns: minmax(0, 1fr); }
-  .group-stats { min-width: 0; }
+  .group-stats { display: grid; gap: 14px; margin-bottom: 14px; }
+  .group-stats .card { min-width: 0; margin: 0; }
   .group-stats p { margin: 0 0 12px; color: var(--muted); font-size: .85rem; }
   .group-chart { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
   .group-chart-label { display: flex; justify-content: space-between; gap: 8px; overflow-wrap: anywhere; }
@@ -148,17 +148,16 @@
   .group-bar { height: 6px; margin-top: 4px; background: var(--bg); border-radius: 6px; overflow: hidden; }
   .group-bar > span { display: block; height: 100%; background: #e8bbd5; border-radius: inherit; }
   #group-categories .group-bar > span { background: var(--mine); }
-  @media (min-width: 900px) {
-    main:has(#view-group:not([hidden])) { max-width: 1040px; }
-    .group-layout { grid-template-columns: minmax(0, 1fr) 290px; gap: 14px; align-items: start; }
-    .group-stats { grid-column: 2; grid-row: 1; }
-    #group-list { grid-column: 1; grid-row: 1; }
+  @media (min-width: 680px) {
+    .group-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   }
   .search-entry > .search-copy { flex: 1 1 150px; }
   .catalog-guide { border-left: 4px solid var(--mine); }
   .catalog-guide ol { margin: 8px 0 12px; padding-left: 22px; }
   .manual-entry[open] summary { margin-bottom: 8px; }
   .search-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  #whatsapp-claim-form .search-actions { margin-top: 10px; gap: 8px; }
+  #whatsapp-claim-msg:empty { display: none; }
   .search-entry > div { min-width: 0; overflow-wrap: anywhere; }
   .search-entry .count { display: block; margin-left: 0; }
   .catalog-results { list-style: none; padding: 0; margin: 8px 0 0; }
@@ -176,6 +175,15 @@
   }
   @media (max-width: 480px) {
     main { padding: 12px; }
+  }
+  @media (max-width: 600px) {
+    .app-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+    .app-nav button,
+    .app-nav button[data-view="catalog"],
+    .app-nav button[data-view="found"],
+    .app-nav button[data-view="admin"] {
+      justify-self: stretch; padding: 8px; font-size: .95rem; overflow-wrap: normal;
+    }
   }
   [hidden] { display: none !important; }
 </style>
@@ -234,8 +242,10 @@
       <form id="whatsapp-claim-form">
         <label for="whatsapp-name">Elige tu nombre para recuperar tus búsquedas</label>
         <select id="whatsapp-name" required></select>
-        <button type="submit">Esta persona soy yo</button>
-        <button type="button" id="whatsapp-skip" class="ghost">Ahora no</button>
+        <div class="search-actions">
+          <button type="submit">Esta persona soy yo</button>
+          <button type="button" id="whatsapp-skip" class="ghost">Ahora no</button>
+        </div>
         <p class="msg" id="whatsapp-claim-msg" role="status"></p>
       </form>
     </section>
@@ -368,21 +378,19 @@
         <h2 id="group-title">Quién busca qué</h2>
         <p id="group-count"></p>
       </div>
-      <div class="group-layout">
-        <aside class="group-stats" id="group-stats" aria-label="Estadísticas del grupo" hidden>
-          <section class="card">
-            <h2>Quién busca más</h2>
-            <p>Modelos pendientes por persona</p>
-            <ul class="group-chart" id="group-people"></ul>
-          </section>
-          <section class="card">
-            <h2>Categorías más buscadas</h2>
-            <p>Una búsqueda por persona y modelo</p>
-            <ul class="group-chart" id="group-categories"></ul>
-          </section>
-        </aside>
-        <div class="card" id="group-list"></div>
-      </div>
+      <div class="card" id="group-list"></div>
+      <aside class="group-stats" id="group-stats" aria-label="Estadísticas del grupo" hidden>
+        <section class="card">
+          <h2>Quién busca más</h2>
+          <p>Modelos pendientes por persona</p>
+          <ul class="group-chart" id="group-people"></ul>
+        </section>
+        <section class="card">
+          <h2>Categorías más buscadas</h2>
+          <p>Una búsqueda por persona y modelo</p>
+          <ul class="group-chart" id="group-categories"></ul>
+        </section>
+      </aside>
     </section>
 
     <section id="view-found" aria-labelledby="found-title" hidden>
