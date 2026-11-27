@@ -214,6 +214,17 @@
       <button type="button" data-view="admin" aria-controls="view-admin" id="admin-nav" hidden>Administración</button>
     </nav>
     <p class="msg" id="list-msg" role="status" hidden></p>
+    <section class="card" id="whatsapp-claim" aria-labelledby="whatsapp-title" hidden>
+      <h2 id="whatsapp-title">¿Ya estabas en la lista de WhatsApp?</h2>
+      <form id="whatsapp-claim-form">
+        <label for="whatsapp-name">Elige tu nombre para recuperar tus búsquedas</label>
+        <select id="whatsapp-name" required></select>
+        <button type="submit">Esta persona soy yo</button>
+        <button type="button" id="whatsapp-skip" class="ghost">Ahora no</button>
+        <p class="msg" id="whatsapp-claim-msg" role="status"></p>
+      </form>
+    </section>
+    <p class="msg ok" id="whatsapp-success" role="status" hidden></p>
 
     <section id="view-mine" aria-labelledby="mine-title">
       <div class="view-header has-action">
@@ -242,6 +253,14 @@
           <input id="product-name" maxlength="80" required>
           <button type="submit">Añadir al catálogo</button>
           <p class="msg" id="product-msg" role="status"></p>
+        </form>
+        <form class="admin-form" id="whatsapp-import-form">
+          <label for="whatsapp-text">Lista de WhatsApp</label>
+          <textarea id="whatsapp-text" rows="6" maxlength="20000" placeholder="Pega la lista de WhatsApp" required></textarea>
+          <button type="button" id="whatsapp-preview-button">Revisar lista</button>
+          <button type="submit" id="whatsapp-import-button" hidden>Importar lista</button>
+          <ul id="whatsapp-preview" hidden></ul>
+          <p class="msg" id="whatsapp-import-msg" role="status"></p>
         </form>
       </div>
     </section>
@@ -376,15 +395,19 @@ const searchReferences = [
   { category: "premium", name: "Nissan Skyline GT-R (R32) Pandem HKS", aliases: ["NISSAN GTR R32 HKS"],
     series: "Boulevard #150", image: "https://m.media-amazon.com/images/I/714+UU+mV4L.jpg" },
   { category: "reservas", name: "Kaido R32 Advan",
+    url: "https://hotwheelsspain.com/product/kaido-house-164-nissan-skyline-gt-r-r32-kaido-works-advan/",
     image: "https://raceland.eu/thumbnail/f0/54/22/1794823388/67-10314_800x574.jpg?ts=1794823389" },
-  { category: "collector", name: "Land Cruiser",
+  { category: "collector", name: "2005 Toyota Land Cruiser Prado", aliases: ["Land Cruiser"],
+    year: "2026", series: "Collector Edition", variant: "Negro",
+    url: "https://hwheadline.com/2005-toyota-land-cruiser-prado-hot-wheels-2026-collector-edition/",
     image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRaWfrQVTUwfJaEJKhHM7LwVWbLeCbO9qkHyU308lswvA&s=10" },
   { category: "team_transport", name: "Team Transport Rexy", aliases: ["TT Rexy"],
+    url: "https://hotwheelsspain.com/product/hot-wheels-164-porsche-911-gt3-r-992-rexy-flipside-hauler-team-transport-2026-mix-4/",
     image: "https://diecasthunter.de/cdn/shop/files/Pink-gruenes-YouTube--Bannerbild-Reisen-Urlaub-Fuer-Lau-29_917b4918-b6fc-4b02-97da-a56b4105ddca.png?v=1791386567&width=1100" }
 ];
 const catalogModels = new Map();
 const completedGuides = new Set();
-const mainlineLoading = new Set();
+const mainlineLoading = new Map();
 const MAINLINE_PAGE_SIZE = 20;
 let mainlineLimit = MAINLINE_PAGE_SIZE;
 let mode = "login";   // login | register
@@ -462,6 +485,11 @@ async function logout() {
   $("manual-entry").open = false;
   $("catalog-guide").hidden = true;
   $("section-form").reset();
+  $("whatsapp-import-form").reset();
+  resetWhatsAppPreview();
+  $("whatsapp-claim").hidden = true;
+  $("whatsapp-success").hidden = true;
+  $("whatsapp-name").replaceChildren();
   $("product-form").reset();
   $("lists").replaceChildren();
   $("group-list").replaceChildren();
@@ -549,6 +577,132 @@ async function loadWants() {
   }
   render();
 }
+
+function parseWhatsAppList(text) {
+  const entries = [];
+  const issues = [];
+  let category = "";
+  let sharedItem = "";
+  let notes = "";
+  for (const [index, original] of text.split(/\r?\n/).entries()) {
+    const line = original.replace(/[\u200b-\u200f\u2060\ufeff]/g, "").replace(/[\\*]/g, "").trim();
+    if (!line) continue;
+    const numbered = /^(?:[-•–—]|\d+[.)])\s*/u.test(line);
+    const content = (numbered ? line.replace(/^(?:[-•–—]|\d+[.)])\s*/u, "") : line)
+      .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N})]+$/gu, "").trim();
+    if (!content) continue;
+    const heading = !numbered && content.match(/^(?:lista\s+)?(básicos|basicos|team transport|premium|silver(?: series)?|collector|reservas)(?:\s*:\s*|\s+|$)(.*)$/i);
+    if (heading) {
+      const keys = { basicos: "basicos", "team transport": "team_transport", premium: "premium",
+        silver: "silver", "silver series": "silver", collector: "collector", reservas: "reservas" };
+      category = keys[searchKey(heading[1])];
+      const shared = heading[2].match(/^(.*?)(?:\s*\((.+)\))?$/);
+      sharedItem = shared[1].trim();
+      notes = shared[2] || "";
+      continue;
+    }
+    const separator = content.indexOf(":");
+    const inferred = separator === -1 && !sharedItem
+      ? content.match(/^(.+?)\s+((?:tt\b|team transport\b|supra\b|charger\b|eclipse\b|ferrari\b).*)$/i) : null;
+    const name = (separator >= 0 ? content.slice(0, separator) : inferred?.[1] || content).trim();
+    const models = separator >= 0 ? content.slice(separator + 1).split(",") : [inferred?.[2] || sharedItem];
+    if (!category || !name || name.length > 80 || models.some((model) => !model.trim() || model.trim().length > 80)) {
+      issues.push("Línea " + (index + 1) + ": " + content);
+      continue;
+    }
+    for (const model of models) entries.push({ name, category, item: model.trim(), notes });
+  }
+  return { entries, issues };
+}
+
+let whatsappEntries = [];
+function resetWhatsAppPreview() {
+  whatsappEntries = [];
+  $("whatsapp-preview").replaceChildren();
+  $("whatsapp-preview").hidden = true;
+  $("whatsapp-import-button").hidden = true;
+  setMsg("whatsapp-import-msg", "");
+}
+
+$("whatsapp-text").addEventListener("input", resetWhatsAppPreview);
+$("whatsapp-preview-button").addEventListener("click", async () => {
+  resetWhatsAppPreview();
+  const { entries, issues } = parseWhatsAppList($("whatsapp-text").value);
+  if (issues.length || !entries.length || entries.length > 500) {
+    return setMsg("whatsapp-import-msg", issues.length
+      ? "Revisa las líneas sin interpretar. Usa «Nombre: modelo». " + issues.slice(0, 5).join(" · ")
+      : "Incluye entre 1 y 500 búsquedas.");
+  }
+  const source = $("whatsapp-text").value;
+  const profile = me;
+  await Promise.all([loadMainline("2026"), loadMainline("2027")]);
+  if (source !== $("whatsapp-text").value || profile !== me) return;
+  whatsappEntries = entries;
+  const labels = new Map(categories.map((category) => [category.id, category.label]));
+  const preview = $("whatsapp-preview");
+  preview.replaceChildren(...entries.map(({ name, category, item, notes }) => {
+    const model = catalogModels.get(productKey(category, item));
+    return h("li", {}, name + " · " + (labels.get(category) || category) + " · " + (model?.name || item), model?.variant ? " · " + model.variant : "",
+      model?.url ? h("a", { href: model.url, target: "_blank", rel: "noopener noreferrer" }, " · Ver ficha") : " · Sin ficha",
+      model?.image ? " · Con foto" : " · Sin foto", notes ? " (" + notes + ")" : "");
+  }));
+  preview.hidden = false;
+  $("whatsapp-import-button").hidden = false;
+  setMsg("whatsapp-import-msg", entries.length + " búsquedas para revisar.", true);
+});
+
+$("whatsapp-import-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (!me?.is_admin || !whatsappEntries.length || $("whatsapp-import-button").disabled) return;
+  const button = $("whatsapp-import-button");
+  button.disabled = true;
+  try {
+    const { data, error } = await sb.rpc("import_whatsapp_searches", { entries: whatsappEntries });
+    if (error) return setMsg("whatsapp-import-msg", niceError(error));
+    $("whatsapp-import-form").reset();
+    resetWhatsAppPreview();
+    setMsg("whatsapp-import-msg", data + " búsquedas nuevas importadas.", true);
+    await loadWants();
+  } finally {
+    button.disabled = false;
+  }
+});
+
+async function loadWhatsAppNames() {
+  const profile = me;
+  const { data, error } = await sb.rpc("list_whatsapp_names");
+  if (me !== profile || error || !data?.length) return;
+  $("whatsapp-name").replaceChildren(h("option", { value: "" }, "Selecciona tu nombre"),
+    ...data.map((person) => h("option", { value: person.name_key }, person.name)));
+  setMsg("whatsapp-claim-msg", "");
+  $("whatsapp-claim").hidden = false;
+}
+
+$("whatsapp-skip").addEventListener("click", () => {
+  $("whatsapp-claim").hidden = true;
+});
+
+$("whatsapp-claim-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const name = $("whatsapp-name").value;
+  const button = event.submitter;
+  if (!me || !name || button.disabled) return;
+  if (!confirm("¿Vincular este nombre de WhatsApp a tu cuenta?")) return;
+  const profile = me;
+  button.disabled = true;
+  try {
+    const { data, error } = await sb.rpc("claim_whatsapp_searches", { selected_name: name });
+    if (me !== profile) return;
+    if (error) return setMsg("whatsapp-claim-msg", niceError(error));
+    $("whatsapp-claim").hidden = true;
+    $("whatsapp-success").hidden = false;
+    setMsg("whatsapp-success", data ? data + " búsquedas añadidas a tu cuenta." : "Nombre de WhatsApp vinculado.", true);
+    await loadWants();
+    if (me === profile) showView("mine");
+  } finally {
+    button.disabled = false;
+  }
+});
 
 async function addWant(category, item, notes = "") {
   const values = { category, item };
@@ -645,15 +799,20 @@ function searchKey(value) {
   return value.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase().trim();
 }
 
-async function loadMainline(year = $("mainline-year").value) {
+function loadMainline(year = $("mainline-year").value) {
   if (mainline.has(year)) return renderMainline();
   if ($("mainline-year").value === year) {
     $("mainline-status").textContent = "Cargando catálogo de " + year + "…";
     $("mainline-results").replaceChildren();
     $("mainline-more").hidden = true;
   }
-  if (mainlineLoading.has(year)) return;
-  mainlineLoading.add(year);
+  if (mainlineLoading.has(year)) return mainlineLoading.get(year);
+  const request = fetchMainline(year);
+  mainlineLoading.set(year, request);
+  return request;
+}
+
+async function fetchMainline(year) {
   try {
     const response = await fetch("data/mainline-" + year + ".json", { cache: "no-cache" });
     if (!response.ok) throw new Error("No se pudo leer el catálogo");
@@ -1026,6 +1185,7 @@ async function boot() {
   if (me && !recovering) {
     showView(wants.some((w) => w.user_id === me.id && w.status === "open") ? "mine" : "catalog");
     $("app").hidden = false;
+    loadWhatsAppNames();
   }
 }
 
