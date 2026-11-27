@@ -113,6 +113,9 @@
   .note { margin: 4px 0; font-size: .88rem; color: var(--muted); white-space: pre-wrap; overflow-wrap: anywhere; }
   .notes-input { margin-top: 10px; }
   .admin-form + .admin-form { border-top: 1px solid var(--line); padding-top: 8px; }
+  .admin-tools > summary { padding-block: 4px; }
+  .admin-tools[open] > summary { margin-bottom: 12px; }
+  .admin-member-tools { margin-top: 14px; }
   .admin-form button { margin-top: 8px; }
   :root { color-scheme: light dark; }
   body { background: linear-gradient(155deg, var(--bg) 45%, color-mix(in srgb, var(--bg), var(--flame) 14%)); min-height: 100vh; }
@@ -264,7 +267,38 @@
 
     <section id="view-admin" aria-labelledby="admin-title" hidden>
       <div class="view-header"><h2 id="admin-title">Administración</h2></div>
-      <div class="card">
+      <section class="card" aria-labelledby="admin-members-title">
+        <h2 id="admin-members-title">Búsquedas de miembros</h2>
+        <label for="admin-member">Persona</label>
+        <select id="admin-member" disabled><option value="">Selecciona una persona</option></select>
+        <p class="msg" id="admin-member-msg" role="status"></p>
+        <div id="admin-member-tools" class="admin-member-tools" hidden>
+          <details id="admin-picker" class="admin-tools">
+            <summary>Añadir desde el catálogo</summary>
+            <div class="catalog-filters">
+              <div><label for="admin-category">Categoría</label><select id="admin-category"></select></div>
+              <div><label for="admin-year">Año</label><select id="admin-year">
+                <option value="2027">2027 · parcial</option><option value="2026">2026</option>
+              </select></div>
+            </div>
+            <label for="admin-query">Busca por nombre, número o referencia</label>
+            <input id="admin-query" type="search" autocomplete="off">
+            <p id="admin-catalog-status" class="empty" role="status"></p>
+            <ul class="catalog-results" id="admin-results"></ul>
+            <button type="button" id="admin-more" class="ghost small" hidden>Mostrar más modelos</button>
+          </details>
+          <h3>Pendientes</h3>
+          <ul class="catalog-results" id="admin-pending"></ul>
+        </div>
+      </section>
+      <details class="card admin-tools" id="admin-history">
+        <summary>Historial de cambios</summary>
+        <p class="msg" id="admin-history-msg" role="status"></p>
+        <ul class="catalog-results" id="admin-history-list"></ul>
+        <button type="button" class="ghost small" id="admin-history-more" hidden>Ver cambios anteriores</button>
+      </details>
+      <details class="card admin-tools" id="admin-catalog-tools">
+        <summary>Gestionar catálogo</summary>
         <form class="admin-form" id="section-form">
           <label for="section-name">Nombre de la nueva sección</label>
           <input id="section-name" maxlength="60" required>
@@ -279,6 +313,9 @@
           <button type="submit">Añadir al catálogo</button>
           <p class="msg" id="product-msg" role="status"></p>
         </form>
+      </details>
+      <details class="card admin-tools" id="admin-import-tools">
+        <summary>Importar desde WhatsApp</summary>
         <form class="admin-form" id="whatsapp-import-form">
           <label for="whatsapp-text">Lista de WhatsApp</label>
           <textarea id="whatsapp-text" rows="6" maxlength="20000" placeholder="Pega la lista de WhatsApp" required></textarea>
@@ -287,7 +324,7 @@
           <ul id="whatsapp-preview" hidden></ul>
           <p class="msg" id="whatsapp-import-msg" role="status"></p>
         </form>
-      </div>
+      </details>
     </section>
 
     <section id="view-catalog" aria-labelledby="catalog-title" hidden>
@@ -525,6 +562,7 @@ async function logout() {
   $("add-form").reset();
   $("notes-input").open = false;
   $("admin-nav").hidden = true;
+  resetAdmin();
   showView("mine");
   $("manual-entry").open = false;
   $("catalog-guide").hidden = true;
@@ -616,13 +654,14 @@ async function loadWants() {
   if (!wr.error) wants = wr.data;
   if (!pr.error) products = pr.data;
   if (!cr.error && cr.data.length) categories = cr.data;
-  for (const id of ["category", "product-section"]) {
+  for (const id of ["category", "product-section", "admin-category"]) {
     const select = $(id);
     const selected = select.value;
     select.replaceChildren(...categories.map((cat) => h("option", { value: cat.id }, cat.label)));
     if (categories.some((cat) => cat.id === selected)) select.value = selected;
   }
   render();
+  renderAdminCatalog();
 }
 
 function parseWhatsAppList(text) {
@@ -673,6 +712,7 @@ function resetWhatsAppPreview() {
 
 $("whatsapp-text").addEventListener("input", resetWhatsAppPreview);
 $("whatsapp-preview-button").addEventListener("click", async () => {
+  if (!me?.is_admin) return;
   resetWhatsAppPreview();
   const { entries, issues } = parseWhatsAppList($("whatsapp-text").value);
   if (issues.length || !entries.length || entries.length > 500) {
@@ -925,14 +965,8 @@ function renderMainline() {
   const models = mainline.get(year);
   if (!models || !me) return;
   const query = searchKey($("mainline-query").value);
-  const tokens = query.split(/\s+/);
-  const numberQuery = query.match(/^#?(\d{1,3})(?:\/250)?$/);
   const category = $("catalog-category").value;
-  const matches = models.filter((model) => (model.category || "basicos") === category && (numberQuery
-    ? model.number === Number(numberQuery[1])
-    : tokens.every((token) => searchKey([model.name, model.variant, model.series, model.sku, model.wave].join(" ")).includes(token))));
-  matches.sort((a, b) => (b.releaseDate || "").localeCompare(a.releaseDate || "")
-    || (b.waveOrder || 0) - (a.waveOrder || 0));
+  const matches = matchingModels(models, category, query);
   const own = new Set(wants.filter((w) => w.user_id === me.id && w.status === "open" && w.category === category)
     .map((w) => catalogModelForWant(w)?.key || productKey(category, w.item)));
   const count = matches.length === 1 ? "1 modelo" : matches.length + " modelos";
@@ -942,9 +976,7 @@ function renderMainline() {
     : query ? "No hay modelos que coincidan." : "Todavía no hay referencias de esta categoría para este año.";
   $("mainline-more").hidden = matches.length <= mainlineLimit;
   $("mainline-results").replaceChildren(...matches.slice(0, mainlineLimit).map((model) => {
-    const number = model.number ? "#" + String(model.number).padStart(3, "0") : "";
     const item = catalogItem(model, year);
-    const details = [model.variant, model.illustration && "Ilustración", number && number + "/250", model.series, model.wave].filter(Boolean);
     const alreadyOpen = own.has(productKey(category, item));
     const button = h("button", {
       type: "button", class: "ghost small", disabled: alreadyOpen || !categories.some((cat) => cat.id === category),
@@ -958,11 +990,26 @@ function renderMainline() {
         }
       }
     }, alreadyOpen ? "Apuntado" : categories.some((cat) => cat.id === category) ? "+ Apuntarme" : "Sección no disponible");
-    return h("li", { class: "item search-entry" }, catalogThumbnail(model),
-      h("div", {}, h("div", { class: "item-name" }, model.name),
-        h("span", { class: "count" }, details.join(" · ")),
-        model.url ? h("a", { href: model.url, target: "_blank", rel: "noopener noreferrer", class: "count" }, "Ver referencia") : ""), button);
+    return catalogResult(model, button);
   }));
+}
+
+function matchingModels(models, category, query) {
+  const tokens = query.split(/\s+/);
+  const number = query.match(/^#?(\d{1,3})(?:\/250)?$/);
+  return models.filter((model) => (model.category || "basicos") === category && (number
+    ? model.number === Number(number[1])
+    : tokens.every((token) => searchKey([model.name, model.variant, model.series, model.sku, model.wave].join(" ")).includes(token))))
+    .sort((a, b) => (b.releaseDate || "").localeCompare(a.releaseDate || "") || (b.waveOrder || 0) - (a.waveOrder || 0));
+}
+
+function catalogResult(model, button) {
+  const number = model.number ? "#" + String(model.number).padStart(3, "0") : "";
+  const details = [model.variant, model.illustration && "Ilustración", number && number + "/250", model.series, model.wave].filter(Boolean);
+  return h("li", { class: "item search-entry" }, catalogThumbnail(model),
+    h("div", {}, h("div", { class: "item-name" }, model.name),
+      h("span", { class: "count" }, details.join(" · ")),
+      model.url ? h("a", { href: model.url, target: "_blank", rel: "noopener noreferrer", class: "count" }, "Ver referencia") : ""), button);
 }
 
 function catalogThumbnail(model) {
@@ -995,6 +1042,197 @@ $("mainline-more").addEventListener("click", () => {
   renderMainline();
 });
 
+let adminPending = [];
+let adminMemberSequence = 0;
+let adminLimit = MAINLINE_PAGE_SIZE;
+let adminBusy = false;
+let adminHistoryCursor = null;
+let adminHistorySequence = 0;
+
+function resetAdmin() {
+  adminMemberSequence++;
+  adminHistorySequence++;
+  adminPending = [];
+  adminBusy = false;
+  for (const id of ["admin-pending", "admin-results", "admin-history-list"]) $(id).replaceChildren();
+  for (const id of ["admin-member-msg", "admin-history-msg", "admin-catalog-status"]) setMsg(id, "");
+  for (const id of ["admin-picker", "admin-history", "admin-catalog-tools", "admin-import-tools"]) $(id).open = false;
+  $("admin-member").replaceChildren(h("option", { value: "" }, "Selecciona una persona"));
+  $("admin-member").disabled = true;
+  $("admin-member-tools").hidden = true;
+  $("admin-history-more").hidden = true;
+  $("admin-query").value = "";
+}
+
+async function loadAdminMembers() {
+  if (!me?.is_admin) return;
+  const profile = me;
+  const { data, error } = await sb.rpc("admin_searches");
+  if (me !== profile) return;
+  if (error) return setMsg("admin-member-msg", niceError(error));
+  const select = $("admin-member");
+  const previous = select.value;
+  select.replaceChildren(h("option", { value: "" }, "Selecciona una persona"),
+    ...data.map(({ id, nickname }) => h("option", { value: id }, displayName(nickname))));
+  select.disabled = !data.length || adminBusy;
+  if (data.some(({ id }) => id === previous)) select.value = previous;
+  if (previous) await loadAdminPending();
+  else setMsg("admin-member-msg", data.length ? "" : "Todavía no hay cuentas registradas.");
+}
+
+async function loadAdminPending() {
+  const member = $("admin-member").value;
+  const sequence = ++adminMemberSequence;
+  adminPending = [];
+  $("admin-member-tools").hidden = true;
+  setMsg("admin-member-msg", member ? "Cargando búsquedas…" : "");
+  if (!me?.is_admin || !member) return false;
+  const { data, error } = await sb.rpc("admin_searches", { member });
+  if (sequence !== adminMemberSequence) return false;
+  if (error) {
+    setMsg("admin-member-msg", niceError(error));
+    return false;
+  }
+  adminPending = data;
+  $("admin-member-tools").hidden = false;
+  renderAdminPending();
+  renderAdminCatalog();
+  setMsg("admin-member-msg", "");
+  return true;
+}
+
+function renderAdminPending() {
+  const member = $("admin-member").value;
+  const labels = new Map(categories.map(({ id, label }) => [id, label]));
+  $("admin-pending").replaceChildren(...(adminPending.length ? adminPending.map((want) => {
+    const model = catalogModelForWant(want);
+    return h("li", { class: "item search-entry" }, catalogThumbnail(model || { name: want.item }),
+      h("div", { class: "search-copy" }, h("div", { class: "item-name" }, want.item),
+        h("span", { class: "count" }, labels.get(want.category) || want.category),
+        want.notes ? h("p", { class: "note" }, want.notes) : ""),
+      h("button", { type: "button", class: "ghost small", disabled: adminBusy,
+        "aria-label": "Quitar " + want.item,
+        onclick: () => changeAdminSearch(member, want.item, { remove_id: want.id })
+      }, "Quitar"));
+  }) : [h("li", { class: "empty" }, "Esta persona no tiene búsquedas pendientes.")]));
+}
+
+function renderAdminCatalog() {
+  const member = $("admin-member").value;
+  if (!me?.is_admin || !member || $("admin-member-tools").hidden || !$("admin-picker").open) return;
+  const year = $("admin-year").value;
+  const category = $("admin-category").value;
+  const query = searchKey($("admin-query").value);
+  const models = mainline.get(year);
+  const releases = matchingModels(models || [], category, query).map((model) => ({ model, item: catalogItem(model, year) }));
+  const releaseKeys = new Set(releases.map(({ item }) => productKey(category, item)));
+  const custom = products.filter((product) => product.category === category && !releaseKeys.has(productKey(category, product.name))
+    && query.split(/\s+/).every((token) => searchKey(product.name).includes(token)))
+    .map(({ name }) => ({ item: name, model: catalogModels.get(productKey(category, name)) || { name } }));
+  const matches = [...releases, ...custom];
+  const assigned = new Set(adminPending.filter((want) => want.category === category)
+    .flatMap((want) => [productKey(category, want.item), catalogModelForWant(want)?.key]));
+  $("admin-catalog-status").textContent = models
+    ? (matches.length ? matches.length + (matches.length === 1 ? " modelo" : " modelos") : "No hay modelos que coincidan.")
+    : mainlineLoading.has(year) ? "Cargando catálogo…" : "No se pudo cargar este año. Vuelve a abrir el selector para reintentar.";
+  $("admin-more").hidden = matches.length <= adminLimit;
+  $("admin-results").replaceChildren(...matches.slice(0, adminLimit).map(({ model, item }) => {
+    const alreadyOpen = assigned.has(productKey(category, item)) || (model.key && assigned.has(model.key));
+    return catalogResult(model, h("button", { type: "button", class: "ghost small", disabled: adminBusy || !!alreadyOpen,
+      onclick: () => changeAdminSearch(member, item, { search_category: category, search_item: item })
+    }, alreadyOpen ? "Apuntado" : "+ Añadir"));
+  }));
+}
+
+async function loadAdminCatalog() {
+  if (!me?.is_admin || !$("admin-picker").open) return;
+  const loading = loadMainline($("admin-year").value);
+  renderAdminCatalog();
+  await loading;
+  renderAdminCatalog();
+}
+
+async function changeAdminSearch(member, item, change) {
+  if (!me?.is_admin || adminBusy || !member || member !== $("admin-member").value) return;
+  const profile = me;
+  const select = $("admin-member");
+  const name = select.selectedOptions[0].textContent;
+  const removing = !!change.remove_id;
+  if (removing && !confirm("¿Quitar «" + item + "» de las búsquedas de " + name + "?")) return;
+  adminBusy = select.disabled = true;
+  renderAdminPending();
+  renderAdminCatalog();
+  setMsg("admin-member-msg", "Guardando cambio…");
+  try {
+    const { error } = await sb.rpc("admin_change_search", { member, ...change });
+    if (me !== profile) return;
+    if (error) {
+      setMsg("admin-member-msg", error.code === "23505" ? "Esta persona ya tiene apuntado ese modelo." : niceError(error));
+      return;
+    }
+    if ($("admin-history").open) loadAdminHistory();
+    const [refreshed] = await Promise.all([loadAdminPending(), loadWants()]);
+    if (refreshed && me === profile && member === select.value) {
+      setMsg("admin-member-msg", removing ? "Búsqueda retirada." : "Modelo añadido a las búsquedas de " + name + ".", true);
+    }
+  } finally {
+    if (me === profile) {
+      adminBusy = select.disabled = false;
+      renderAdminPending();
+      renderAdminCatalog();
+    }
+  }
+}
+
+async function loadAdminHistory(append = false) {
+  if (!me?.is_admin) return;
+  const sequence = ++adminHistorySequence;
+  const more = $("admin-history-more");
+  more.disabled = true;
+  setMsg("admin-history-msg", "Cargando historial…");
+  let query = sb.from("admin_want_log").select("id,changed_at,action,admin_name,member_name,item,category")
+    .order("id", { ascending: false }).limit(21);
+  if (append) query = query.lt("id", adminHistoryCursor);
+  const { data, error } = await query;
+  if (sequence !== adminHistorySequence) return;
+  more.disabled = false;
+  if (error) return setMsg("admin-history-msg", niceError(error));
+  setMsg("admin-history-msg", append || data.length ? "" : "Todavía no hay cambios registrados.");
+  const labels = new Map(categories.map(({ id, label }) => [id, label]));
+  const list = $("admin-history-list");
+  if (!append) list.replaceChildren();
+  const rows = data.slice(0, 20);
+  for (const row of rows) {
+    const date = new Date(row.changed_at).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" });
+    list.append(h("li", { class: "item" }, h("div", { class: "item-name" }, row.item),
+      h("div", {}, displayName(row.admin_name) + (row.action === "add" ? " añadió el modelo a " : " retiró el modelo de ") + displayName(row.member_name)),
+      h("span", { class: "count" }, [date, labels.get(row.category) || row.category].join(" · "))));
+  }
+  adminHistoryCursor = rows.at(-1)?.id;
+  more.hidden = data.length <= 20;
+}
+
+$("admin-member").addEventListener("change", loadAdminPending);
+$("admin-picker").addEventListener("toggle", loadAdminCatalog);
+$("admin-year").addEventListener("change", () => {
+  adminLimit = MAINLINE_PAGE_SIZE;
+  loadAdminCatalog();
+});
+for (const [id, event] of [["admin-category", "change"], ["admin-query", "input"]]) {
+  $(id).addEventListener(event, () => {
+    adminLimit = MAINLINE_PAGE_SIZE;
+    renderAdminCatalog();
+  });
+}
+$("admin-more").addEventListener("click", () => {
+  adminLimit += MAINLINE_PAGE_SIZE;
+  renderAdminCatalog();
+});
+$("admin-history").addEventListener("toggle", () => {
+  if ($("admin-history").open) loadAdminHistory();
+});
+$("admin-history-more").addEventListener("click", () => loadAdminHistory(true));
+
 function showView(view) {
   if (view === "admin" && !me?.is_admin) return;
   for (const button of $("app-nav").children) {
@@ -1004,6 +1242,7 @@ function showView(view) {
     else button.removeAttribute("aria-current");
   }
   if (view === "catalog") loadMainline();
+  if (view === "admin") loadAdminMembers();
 }
 
 for (const button of $("app-nav").children) {
