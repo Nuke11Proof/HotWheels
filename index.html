@@ -373,6 +373,8 @@ let loadSequence = 0;
 let products = [];    // catalog of products (can have nobody looking for them)
 const mainline = new Map();
 const searchReferences = [
+  { category: "premium", name: "Nissan Skyline GT-R (R32) Pandem HKS", aliases: ["NISSAN GTR R32 HKS"],
+    series: "Boulevard #150", image: "https://m.media-amazon.com/images/I/81sxC2ir8ZL.jpg" },
   { category: "reservas", name: "Kaido R32 Advan",
     image: "https://raceland.eu/thumbnail/f0/54/22/1794823388/67-10314_800x574.jpg?ts=1794823389" },
   { category: "collector", name: "Land Cruiser",
@@ -687,6 +689,23 @@ for (const reference of searchReferences) {
   for (const name of [model.name, ...(model.aliases || [])]) catalogModels.set(productKey(model.category, name), model);
 }
 
+const correctedSearches = {
+  15: {
+    original: "basicos|porsche 911 gt3 rs (2nd color) · 2027 jpd61",
+    target: "basicos|porsche 911 gt3 rs · 2027 jnx83"
+  },
+  16: {
+    original: "basicos|'84 audi sport quattro (2nd color) · 2027 jpd60",
+    target: "basicos|'84 audi sport quattro · 2027 jny02"
+  }
+};
+
+function catalogModelForWant(want) {
+  const key = productKey(want.category, want.item);
+  const correction = correctedSearches[want.id];
+  return catalogModels.get(correction?.original === key ? correction.target : key);
+}
+
 function catalogItem(model, year) {
   const number = model.number ? "#" + String(model.number).padStart(3, "0") : "";
   const reference = model.sku || number;
@@ -709,7 +728,7 @@ function renderMainline() {
   matches.sort((a, b) => (b.releaseDate || "").localeCompare(a.releaseDate || "")
     || (b.waveOrder || 0) - (a.waveOrder || 0));
   const own = new Set(wants.filter((w) => w.user_id === me.id && w.status === "open" && w.category === category)
-    .map((w) => catalogModels.get(productKey(category, w.item))?.key || productKey(category, w.item)));
+    .map((w) => catalogModelForWant(w)?.key || productKey(category, w.item)));
   const count = matches.length === 1 ? "1 modelo" : matches.length + " modelos";
   const hasWaves = matches.some((model) => model.waveOrder);
   $("mainline-status").textContent = matches.length
@@ -826,7 +845,7 @@ function renderMine() {
   }
   const labels = new Map(categories.map((cat) => [cat.id, cat.label]));
   for (const w of pending) {
-    const model = catalogModels.get(productKey(w.category, w.item));
+    const model = catalogModelForWant(w);
     list.append(h("div", { class: "item search-entry" },
       catalogThumbnail(model || { name: w.item }),
       h("div", { class: "search-copy" }, h("div", { class: "item-name" }, model?.name || w.item),
@@ -847,7 +866,7 @@ function renderGroup() {
   for (const want of wants) {
     if (want.status !== "open") continue;
     const lookup = productKey(want.category, want.item);
-    const model = catalogModels.get(lookup);
+    const model = catalogModelForWant(want);
     const key = model?.key || lookup;
     if (!groups.has(key)) groups.set(key, { model, want, people: new Map() });
     const own = want.user_id === me.id;
