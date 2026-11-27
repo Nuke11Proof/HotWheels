@@ -119,9 +119,17 @@
   main { max-width: 980px; padding: 24px 16px; }
   header { padding: 8px 0; }
   h1 { font-family: system-ui, sans-serif; font-size: clamp(1.35rem, 4vw, 2rem); font-weight: 800; }
-  .app-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
-  .app-nav button { background: var(--card); color: var(--ink); border: 1px solid var(--line); padding: 8px 12px; }
-  .app-nav button[aria-current="page"] { background: var(--flame); color: var(--flame-ink); border-color: var(--flame); }
+  .app-nav { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)); gap: 6px; margin-bottom: 18px; }
+  .app-nav button {
+    min-height: 44px; min-width: 0; padding: 6px 4px; overflow-wrap: anywhere;
+    background: var(--card); color: var(--ink); border: 1px solid var(--line);
+  }
+  .app-nav button[aria-current="page"] { border-color: var(--flame); box-shadow: inset 0 -3px var(--flame); }
+  .app-nav button[data-view="catalog"] {
+    background: var(--flame); color: var(--flame-ink); border-color: var(--flame); font-size: 1.05rem;
+  }
+  .app-nav button[data-view="catalog"][aria-current="page"] { box-shadow: inset 0 -3px var(--flame-ink); }
+  .app-nav button[data-view="found"], .app-nav button[data-view="admin"] { justify-self: start; padding-inline: 10px; font-size: .83rem; }
   .view-header { padding: 18px; margin-bottom: 14px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); }
   .view-header h2 { margin: 0; padding: 0; border: 0; font-size: clamp(1.25rem, 3vw, 1.55rem); }
   .view-header p { margin: 4px 0 0; color: var(--muted); }
@@ -130,8 +138,8 @@
   #view-group .view-header { border-top: 4px solid #e8bbd5; }
   #view-catalog .view-header, #view-admin .view-header { border-top: 4px solid var(--flame); }
   #view-found .view-header { border-top: 4px solid #bcd9ef; }
-  #mine-list .search-entry { justify-content: flex-start; }
-  #mine-list .search-entry > .search-copy { flex: 1 1 150px; }
+  #mine-list .search-entry, #group-list .search-entry { justify-content: flex-start; }
+  .search-entry > .search-copy { flex: 1 1 150px; }
   .catalog-guide { border-left: 4px solid var(--mine); }
   .catalog-guide ol { margin: 8px 0 12px; padding-left: 22px; }
   .manual-entry[open] summary { margin-bottom: 8px; }
@@ -151,10 +159,8 @@
     .catalog-thumbnail { width: 72px; }
     .catalog-results button { grid-column: 2; justify-self: start; }
   }
-  .person-models { margin: 6px 0; padding-left: 20px; }
   @media (max-width: 480px) {
     main { padding: 12px; }
-    .app-nav button { flex: 1 0 auto; }
   }
   [hidden] { display: none !important; }
 </style>
@@ -201,9 +207,9 @@
   <!-- APP -->
   <section id="app" hidden>
     <nav class="app-nav" id="app-nav" aria-label="Apartados de Lista Hot Wheels">
+      <button type="button" data-view="catalog" aria-controls="view-catalog">Catálogo</button>
       <button type="button" data-view="mine" aria-controls="view-mine" aria-current="page">Mis búsquedas</button>
       <button type="button" data-view="group" aria-controls="view-group">Grupo</button>
-      <button type="button" data-view="catalog" aria-controls="view-catalog">Catálogo</button>
       <button type="button" data-view="found" aria-controls="view-found">Encontrados</button>
       <button type="button" data-view="admin" aria-controls="view-admin" id="admin-nav" hidden>Administración</button>
     </nav>
@@ -366,6 +372,7 @@ let categories = DEFAULT_CATEGORIES;
 let loadSequence = 0;
 let products = [];    // catalog of products (can have nobody looking for them)
 const mainline = new Map();
+const catalogModels = new Map();
 const completedGuides = new Set();
 const mainlineLoading = new Set();
 const MAINLINE_PAGE_SIZE = 20;
@@ -640,8 +647,15 @@ async function loadMainline(year = $("mainline-year").value) {
   try {
     const response = await fetch("data/mainline-" + year + ".json");
     if (!response.ok) throw new Error("No se pudo leer el catálogo");
-    mainline.set(year, await response.json());
-    if (me) renderMine();
+    const models = await response.json();
+    mainline.set(year, models);
+    for (const model of models) {
+      catalogModels.set(productKey(model.category || "basicos", catalogItem(model, year)), { ...model, year });
+    }
+    if (me) {
+      renderMine();
+      renderGroup();
+    }
     if ($("mainline-year").value === year) renderMainline();
   } catch {
     if ($("mainline-year").value === year) {
@@ -650,6 +664,10 @@ async function loadMainline(year = $("mainline-year").value) {
   } finally {
     mainlineLoading.delete(year);
   }
+}
+
+function productKey(category, item) {
+  return category + "|" + item.trim().toLowerCase();
 }
 
 function catalogItem(model, year) {
@@ -790,18 +808,12 @@ function renderMine() {
     return;
   }
   const labels = new Map(categories.map((cat) => [cat.id, cat.label]));
-  const photos = new Map();
-  for (const [year, models] of mainline) {
-    for (const model of models) {
-      if (model.image) photos.set((model.category || "basicos") + "|" + searchKey(catalogItem(model, year)), model);
-    }
-  }
   for (const w of pending) {
-    const model = photos.get(w.category + "|" + searchKey(w.item));
+    const model = catalogModels.get(productKey(w.category, w.item));
     list.append(h("div", { class: "item search-entry" },
       catalogThumbnail(model || { name: w.item }),
-      h("div", { class: "search-copy" }, h("div", { class: "item-name" }, w.item),
-        h("span", { class: "count" }, labels.get(w.category) || w.category),
+      h("div", { class: "search-copy" }, h("div", { class: "item-name" }, model?.name || w.item),
+        h("span", { class: "count" }, [labels.get(w.category) || w.category, model?.year, model?.series].filter(Boolean).join(" · ")),
         w.notes ? h("p", { class: "note" }, w.notes) : ""),
       h("div", { class: "search-actions" }, h("button", {
         type: "button", class: "ghost small", "aria-label": "Marcar " + w.item + " como encontrado",
@@ -814,28 +826,32 @@ function renderMine() {
 function renderGroup() {
   const box = $("group-list");
   const labels = new Map(categories.map((cat) => [cat.id, cat.label]));
-  const people = new Map();
+  const groups = new Map();
   for (const want of wants) {
     if (want.status !== "open") continue;
-    if (!people.has(want.user_id)) {
-      const own = want.user_id === me.id;
-      const name = own ? me.nickname + " (tú)" : want.profiles?.nickname || "Miembro del grupo";
-      people.set(want.user_id, { name, searches: [] });
-    }
-    people.get(want.user_id).searches.push(want);
+    const key = productKey(want.category, want.item);
+    if (!groups.has(key)) groups.set(key, { model: catalogModels.get(key), want, people: new Map() });
+    const own = want.user_id === me.id;
+    const name = own ? me.nickname + " (tú)" : want.profiles?.nickname || "Miembro del grupo";
+    groups.get(key).people.set(want.user_id, { name, own });
   }
 
-  $("group-count").textContent = people.size === 1 ? "1 persona" : people.size + " personas";
+  $("group-count").textContent = groups.size === 1 ? "1 modelo buscado" : groups.size + " modelos buscados";
   box.replaceChildren();
-  if (!people.size) {
+  if (!groups.size) {
     box.append(h("p", { class: "empty" }, "Todavía no hay búsquedas pendientes."));
     return;
   }
-  for (const person of [...people.values()].sort((a, b) => a.name.localeCompare(b.name, "es"))) {
-    const items = h("ul", { class: "person-models" }, ...person.searches.map((want) =>
-      h("li", {}, want.item, h("span", { class: "count" }, labels.get(want.category) || want.category))
-    ));
-    box.append(h("div", { class: "item" }, h("div", { class: "item-name" }, person.name), items));
+  for (const { model, want, people } of [...groups.values()].sort((a, b) =>
+    b.people.size - a.people.size || (a.model?.name || a.want.item).localeCompare(b.model?.name || b.want.item, "es"))) {
+    const names = [...people.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
+    const chips = h("div", { class: "chips" }, ...names.map(({ name, own }) =>
+      h("span", { class: own ? "chip mine" : "chip" }, name)));
+    const interest = people.size === 1 ? "1 persona" : people.size + " personas";
+    box.append(h("div", { class: "item search-entry" },
+      catalogThumbnail(model || { name: want.item }),
+      h("div", { class: "search-copy" }, h("div", { class: "item-name" }, model?.name || want.item),
+        h("span", { class: "count" }, [labels.get(want.category) || want.category, model?.year, interest].filter(Boolean).join(" · ")), chips)));
   }
 }
 
@@ -844,6 +860,10 @@ function render() {
   renderGroup();
   renderMine();
   if (!$("view-catalog").hidden) renderMainline();
+  for (const year of ["2026", "2027"]) {
+    const suffix = new RegExp(" · " + year + "(?: |$)");
+    if (!mainline.has(year) && wants.some((w) => w.status === "open" && suffix.test(w.item))) loadMainline(year);
+  }
   const lists = $("lists");
   const previous = new Map(Array.from(lists.children, (section) => [section.dataset.category, section.open]));
   lists.replaceChildren();
@@ -965,13 +985,10 @@ async function boot() {
   $("admin-nav").hidden = !me.is_admin;
   const firstVisit = !hasSeenGuide(me.id);
   $("catalog-guide").hidden = !firstVisit;
-  showView(firstVisit ? "catalog" : "mine");
   await loadWants();
   if (me && !recovering) {
+    showView(wants.some((w) => w.user_id === me.id && w.status === "open") ? "mine" : "catalog");
     $("app").hidden = false;
-    for (const year of ["2026", "2027"]) {
-      if (wants.some((w) => w.user_id === me.id && w.status === "open" && w.item.includes(" · " + year + " "))) loadMainline(year);
-    }
   }
 }
 
