@@ -688,7 +688,7 @@ function renderMainline() {
   const category = $("catalog-category").value;
   const matches = models.filter((model) => (model.category || "basicos") === category && (numberQuery
     ? model.number === Number(numberQuery[1])
-    : tokens.every((token) => searchKey([model.name, model.series, model.sku, model.wave].join(" ")).includes(token))));
+    : tokens.every((token) => searchKey([model.name, model.variant, model.series, model.sku, model.wave].join(" ")).includes(token))));
   matches.sort((a, b) => (b.releaseDate || "").localeCompare(a.releaseDate || "")
     || (b.waveOrder || 0) - (a.waveOrder || 0));
   const own = new Set(wants.filter((w) => w.user_id === me.id && w.status === "open" && w.category === category)
@@ -702,7 +702,7 @@ function renderMainline() {
   $("mainline-results").replaceChildren(...matches.slice(0, mainlineLimit).map((model) => {
     const number = model.number ? "#" + String(model.number).padStart(3, "0") : "";
     const item = catalogItem(model, year);
-    const details = [number && number + "/250", model.series, model.wave].filter(Boolean);
+    const details = [model.variant, number && number + "/250", model.series, model.wave].filter(Boolean);
     const alreadyOpen = own.has(searchKey(item));
     const button = h("button", {
       type: "button", class: "ghost small", disabled: alreadyOpen || !categories.some((cat) => cat.id === category),
@@ -813,7 +813,7 @@ function renderMine() {
     list.append(h("div", { class: "item search-entry" },
       catalogThumbnail(model || { name: w.item }),
       h("div", { class: "search-copy" }, h("div", { class: "item-name" }, model?.name || w.item),
-        h("span", { class: "count" }, [labels.get(w.category) || w.category, model?.year, model?.series].filter(Boolean).join(" · ")),
+        h("span", { class: "count" }, [labels.get(w.category) || w.category, model?.year, model?.variant, model?.series].filter(Boolean).join(" · ")),
         w.notes ? h("p", { class: "note" }, w.notes) : ""),
       h("div", { class: "search-actions" }, h("button", {
         type: "button", class: "ghost small", "aria-label": "Marcar " + w.item + " como encontrado",
@@ -851,7 +851,7 @@ function renderGroup() {
     box.append(h("div", { class: "item search-entry" },
       catalogThumbnail(model || { name: want.item }),
       h("div", { class: "search-copy" }, h("div", { class: "item-name" }, model?.name || want.item),
-        h("span", { class: "count" }, [labels.get(want.category) || want.category, model?.year, interest].filter(Boolean).join(" · ")), chips)));
+        h("span", { class: "count" }, [labels.get(want.category) || want.category, model?.year, model?.variant, interest].filter(Boolean).join(" · ")), chips)));
   }
 }
 
