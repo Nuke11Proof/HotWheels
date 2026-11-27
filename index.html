@@ -278,7 +278,7 @@
             <div class="catalog-filters">
               <div><label for="admin-category">Categoría</label><select id="admin-category"></select></div>
               <div><label for="admin-year">Año</label><select id="admin-year">
-                <option value="2027">2027 · parcial</option><option value="2026">2026</option>
+                <option value="2027">2027 · parcial</option><option value="2026">2026</option><option value="2025">2025</option>
               </select></div>
             </div>
             <label for="admin-query">Busca por nombre, número o referencia</label>
@@ -359,6 +359,7 @@
             <select id="mainline-year">
               <option value="2027" selected>2027 · parcial</option>
               <option value="2026">2026</option>
+              <option value="2025">2025</option>
             </select>
           </div>
         </div>
@@ -367,6 +368,9 @@
         <p id="mainline-status" class="empty" role="status"></p>
         <ul class="catalog-results" id="mainline-results"></ul>
         <button id="mainline-more" type="button" class="ghost small" hidden>Mostrar más modelos</button>
+        <p class="catalog-links" id="mainline-source-2025" hidden>
+          <a href="https://munclemikes.com/pages/hot-wheels-complete-casting-list-of-cars-2025" target="_blank" rel="noopener noreferrer">Lista de Básicos 2025 en Muncle Mikes</a>
+        </p>
         <p class="catalog-links" id="mainline-source-2026" hidden>
           <a href="https://community.creations.mattel.com/news/hot-wheels/public-news-stories/download-the-2026-hot-wheels-full-year-poster-wave-4-r2280/" target="_blank" rel="noopener noreferrer">Ver el póster de Mattel</a>
           · <a href="https://munclemikes.com/pages/hot-wheels-complete-casting-list-of-cars-2026" target="_blank" rel="noopener noreferrer">Fuente de la lista</a>
@@ -465,6 +469,7 @@ let categories = DEFAULT_CATEGORIES;
 let loadSequence = 0;
 let products = [];    // catalog of products (can have nobody looking for them)
 const mainline = new Map();
+const catalogYears = Array.from($("mainline-year").options, (option) => option.value);
 const searchReferences = [
   { category: "premium", name: "Nissan Skyline GT-R (R32) Pandem HKS", aliases: ["NISSAN GTR R32 HKS"],
     series: "Boulevard #150", image: "https://m.media-amazon.com/images/I/714+UU+mV4L.jpg" },
@@ -722,7 +727,7 @@ $("whatsapp-preview-button").addEventListener("click", async () => {
   }
   const source = $("whatsapp-text").value;
   const profile = me;
-  await Promise.all([loadMainline("2026"), loadMainline("2027")]);
+  await Promise.all(catalogYears.map(loadMainline));
   if (source !== $("whatsapp-text").value || profile !== me) return;
   whatsappEntries = entries;
   const labels = new Map(categories.map((category) => [category.id, category.label]));
@@ -960,8 +965,7 @@ function catalogItem(model, year) {
 
 function renderMainline() {
   const year = $("mainline-year").value;
-  $("mainline-source-2026").hidden = year !== "2026";
-  $("mainline-source-2027").hidden = year !== "2027";
+  for (const sourceYear of catalogYears) $("mainline-source-" + sourceYear).hidden = year !== sourceYear;
   const models = mainline.get(year);
   if (!models || !me) return;
   const query = searchKey($("mainline-query").value);
@@ -1389,7 +1393,7 @@ function render() {
   renderGroup();
   renderMine();
   if (!$("view-catalog").hidden) renderMainline();
-  for (const year of ["2026", "2027"]) {
+  for (const year of catalogYears) {
     if (!mainline.has(year) && wants.some((w) => w.status === "open")) loadMainline(year);
   }
   const lists = $("lists");
