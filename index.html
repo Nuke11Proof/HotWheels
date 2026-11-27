@@ -139,6 +139,21 @@
   #view-catalog .view-header, #view-admin .view-header { border-top: 4px solid var(--flame); }
   #view-found .view-header { border-top: 4px solid #bcd9ef; }
   #mine-list .search-entry, #group-list .search-entry { justify-content: flex-start; }
+  .group-layout { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .group-stats { min-width: 0; }
+  .group-stats p { margin: 0 0 12px; color: var(--muted); font-size: .85rem; }
+  .group-chart { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .group-chart-label { display: flex; justify-content: space-between; gap: 8px; overflow-wrap: anywhere; }
+  .group-chart-detail { display: block; color: var(--muted); font-size: .8rem; overflow-wrap: anywhere; }
+  .group-bar { height: 6px; margin-top: 4px; background: var(--bg); border-radius: 6px; overflow: hidden; }
+  .group-bar > span { display: block; height: 100%; background: #e8bbd5; border-radius: inherit; }
+  #group-categories .group-bar > span { background: var(--mine); }
+  @media (min-width: 900px) {
+    main:has(#view-group:not([hidden])) { max-width: 1040px; }
+    .group-layout { grid-template-columns: minmax(0, 1fr) 290px; gap: 14px; align-items: start; }
+    .group-stats { grid-column: 2; grid-row: 1; }
+    #group-list { grid-column: 1; grid-row: 1; }
+  }
   .search-entry > .search-copy { flex: 1 1 150px; }
   .catalog-guide { border-left: 4px solid var(--mine); }
   .catalog-guide ol { margin: 8px 0 12px; padding-left: 22px; }
@@ -316,7 +331,7 @@
           · <a href="https://orangetrackdiecast.com/2027-hot-wheels-master-list-of-all-lines/" target="_blank" rel="noopener noreferrer">Otras categorías</a>
         </p>
       </section>
-      <h2>Catálogo del grupo</h2>
+      <h2>Modelos del grupo</h2>
       <div class="toolbar" role="group" aria-label="Vista de secciones">
         <button type="button" class="ghost" id="expand-all">Expandir todo</button>
         <button type="button" class="ghost" id="collapse-all">Contraer todo</button>
@@ -353,7 +368,21 @@
         <h2 id="group-title">Quién busca qué</h2>
         <p id="group-count"></p>
       </div>
-      <div class="card" id="group-list"></div>
+      <div class="group-layout">
+        <aside class="group-stats" id="group-stats" aria-label="Estadísticas del grupo" hidden>
+          <section class="card">
+            <h2>Quién busca más</h2>
+            <p>Modelos pendientes por persona</p>
+            <ul class="group-chart" id="group-people"></ul>
+          </section>
+          <section class="card">
+            <h2>Categorías más buscadas</h2>
+            <p>Una búsqueda por persona y modelo</p>
+            <ul class="group-chart" id="group-categories"></ul>
+          </section>
+        </aside>
+        <div class="card" id="group-list"></div>
+      </div>
     </section>
 
     <section id="view-found" aria-labelledby="found-title" hidden>
@@ -493,6 +522,9 @@ async function logout() {
   $("product-form").reset();
   $("lists").replaceChildren();
   $("group-list").replaceChildren();
+  $("group-stats").hidden = true;
+  $("group-people").replaceChildren();
+  $("group-categories").replaceChildren();
   $("group-count").textContent = "";
   $("mine-list").replaceChildren();
   $("mainline-query").value = "";
@@ -1034,6 +1066,7 @@ function renderGroup() {
   }
 
   $("group-count").textContent = groups.size === 1 ? "1 modelo buscado" : groups.size + " modelos buscados";
+  renderGroupStats(groups, labels);
   box.replaceChildren();
   if (!groups.size) {
     box.append(h("p", { class: "empty" }, "Todavía no hay búsquedas pendientes."));
@@ -1058,8 +1091,43 @@ function renderGroup() {
     box.append(h("div", { class: "item search-entry" },
       catalogThumbnail(model || { name: want.item }),
       h("div", { class: "search-copy" }, h("div", { class: "item-name" }, model?.name || want.item),
-        h("span", { class: "count" }, [labels.get(want.category) || want.category, model?.year, model?.variant, model?.illustration && "Ilustración", interest].filter(Boolean).join(" · ")), chips)));
+        h("span", { class: "count" }, [labels.get(want.category) || want.category, model?.year, model?.variant, model?.illustration && "Ilustración", interest].filter(Boolean).join(" · ")), chips,
+        ...names.map(({ name, want }) => renderNote(want, name)))));
   }
+}
+
+function renderGroupStats(groups, labels) {
+  const people = new Map();
+  const totals = new Map();
+  for (const group of groups.values()) {
+    for (const [id, { name, want }] of group.people) {
+      if (!people.has(id)) people.set(id, { name, count: 0, categories: new Map() });
+      const person = people.get(id);
+      person.count++;
+      person.categories.set(want.category, (person.categories.get(want.category) || 0) + 1);
+      totals.set(want.category, (totals.get(want.category) || 0) + 1);
+    }
+  }
+
+  const rank = (a, b) => b.count - a.count || a.name.localeCompare(b.name, "es");
+  const categoriesByCount = (counts) => [...counts].map(([id, count]) => ({
+    name: labels.get(id) || id, count
+  })).sort(rank);
+  const leaders = [...people.values()].sort(rank).slice(0, 5).map((person) => {
+    const categories = categoriesByCount(person.categories);
+    const favorites = categories.filter(({ count }) => count === categories[0].count);
+    return { ...person, detail: favorites.map(({ name, count }) => name + " (" + count + ")").join(" · ") };
+  });
+
+  for (const [id, rows] of [["group-people", leaders], ["group-categories", categoriesByCount(totals)]]) {
+    $(id).replaceChildren(...rows.map(({ name, count, detail }) => h("li", {},
+      h("div", { class: "group-chart-label" }, h("span", {}, name), h("strong", {}, String(count))),
+      detail ? h("span", { class: "group-chart-detail" }, detail) : "",
+      h("div", { class: "group-bar", "aria-hidden": "true" },
+        h("span", { style: "width:" + (100 * count / rows[0].count) + "%" }))
+    )));
+  }
+  $("group-stats").hidden = !groups.size;
 }
 
 function render() {
@@ -1077,55 +1145,38 @@ function render() {
   for (const cat of categories) {
     const open = wants.filter((w) => w.category === cat.id && w.status === "open");
     const card = h("details", { class: "card", "data-category": cat.id, open: previous.get(cat.id) ?? true });
-    card.append(h("summary", {}, cat.label, h("span", { class: "count" }, open.length === 1 ? "1 pendiente" : open.length + " pendientes")));
-
     const groups = new Map();
     for (const p of products.filter((p) => p.category === cat.id)) {
       groups.set(p.name.trim().toLowerCase(), { name: p.name.trim(), rows: [], productId: p.id });
     }
-    if (!open.length && !groups.size) {
-      card.append(h("p", { class: "empty" }, "Nadie busca nada aquí todavía."));
-    } else {
-      for (const w of open) {
-        const key = w.item.trim().toLowerCase();
-        if (!groups.has(key)) groups.set(key, { name: w.item.trim(), rows: [] });
-        groups.get(key).rows.push(w);
-      }
-      for (const g of groups.values()) {
-        const chips = h("div", { class: "chips" });
-        for (const w of g.rows) {
-          const mine = w.user_id === me.id;
-          const nick = (w.profiles && w.profiles.nickname) || "?";
-          const chip = h("span", { class: "chip" + (mine ? " mine" : "") }, nick);
-          if (mine) {
-            chip.append(h("button", {
-              type: "button", title: "Marcar como encontrado", "aria-label": "Encontrado: " + nick,
-              onclick: () => { if (confirm("¿Marcar «" + g.name + "» de " + nick + " como encontrado?")) setStatus(w.id, "found"); }
-            }, "✓"));
-            chip.append(withdrawButton(w));
+    for (const w of open) {
+      const key = w.item.trim().toLowerCase();
+      if (!groups.has(key)) groups.set(key, { name: w.item.trim(), rows: [] });
+      groups.get(key).rows.push(w);
+    }
+    card.append(h("summary", {}, cat.label, h("span", { class: "count" },
+      groups.size === 1 ? "1 modelo" : groups.size + " modelos")));
+    if (!groups.size) card.append(h("p", { class: "empty" }, "Todavía no hay modelos en esta categoría."));
+    for (const g of groups.values()) {
+      const actions = h("div", { class: "search-actions" });
+      const mine = g.rows.some((w) => w.user_id === me.id);
+      actions.append(h("button", {
+        type: "button", class: "ghost small", disabled: mine,
+        onclick: async () => { const err = await addWant(cat.id, g.name); if (err) alert(err); }
+      }, mine ? "Apuntado" : "+ Apuntarme"));
+      if (!g.rows.length && g.productId && me.is_admin) {
+        actions.append(h("button", {
+          type: "button", class: "ghost small",
+          onclick: async () => {
+            if (!confirm("¿Quitar «" + g.name + "» del catálogo?")) return;
+            const { error } = await sb.from("products").delete().eq("id", g.productId);
+            if (error) alert(niceError(error));
+            await loadWants();
           }
-          chips.append(chip);
-        }
-        if (!g.rows.some((w) => w.user_id === me.id)) {
-          chips.append(h("button", {
-            type: "button", class: "ghost small",
-            onclick: async () => { const err = await addWant(cat.id, g.name); if (err) alert(err); }
-          }, g.rows.length ? "+ Yo también" : "+ Apuntarme"));
-        }
-        if (!g.rows.length && g.productId && me.is_admin) {
-          chips.append(h("button", {
-            type: "button", class: "ghost small",
-            onclick: async () => {
-              if (!confirm("¿Quitar «" + g.name + "» del catálogo?")) return;
-              const { error } = await sb.from("products").delete().eq("id", g.productId);
-              if (error) alert(niceError(error));
-              await loadWants();
-            }
-          }, "Quitar del catálogo"));
-        }
-        card.append(h("div", { class: "item" }, h("div", { class: "item-name" }, g.name), chips,
-          ...g.rows.map((w) => renderNote(w, w.profiles?.nickname || "?"))));
+        }, "Quitar del catálogo"));
       }
+      card.append(h("div", { class: "item search-entry" },
+        h("div", { class: "item-name search-copy" }, g.name), actions));
     }
     lists.append(card);
   }
