@@ -913,7 +913,7 @@ async function fetchMainline(year) {
     for (const model of models) {
       const category = model.category || "basicos";
       const item = catalogItem(model, year);
-      const reference = { ...model, year, key: productKey(category, item) };
+      const reference = { ...model, year, item, key: productKey(category, item) };
       for (const name of [item, ...(model.aliases || [])]) catalogModels.set(productKey(category, name), reference);
     }
     if (me) {
@@ -1341,7 +1341,7 @@ function renderGroup() {
       : h("button", {
         type: "button", class: "ghost small",
         onclick: async () => {
-          const err = await addWant(want.category, want.item);
+          const err = await addWant(want.category, model?.item || want.item);
           if (err) alert(err);
         }
       }, "+ Yo también"));
@@ -1349,7 +1349,8 @@ function renderGroup() {
     box.append(h("div", { class: "item search-entry" },
       catalogThumbnail(model || { name: want.item }),
       h("div", { class: "search-copy" }, h("div", { class: "item-name" }, model?.name || want.item),
-        h("span", { class: "count" }, [labels.get(want.category) || want.category, model?.year, model?.variant, model?.illustration && "Ilustración", interest].filter(Boolean).join(" · ")), chips,
+        h("span", { class: "count" }, [labels.get(want.category) || want.category, model?.year, model?.variant, model?.illustration && "Ilustración", interest].filter(Boolean).join(" · ")),
+        model?.url ? h("a", { href: model.url, target: "_blank", rel: "noopener noreferrer", class: "count" }, "Ver referencia") : "", chips,
         ...names.map(({ name, want }) => renderNote(want, name)))));
   }
 }
