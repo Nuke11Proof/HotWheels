@@ -372,6 +372,14 @@ let categories = DEFAULT_CATEGORIES;
 let loadSequence = 0;
 let products = [];    // catalog of products (can have nobody looking for them)
 const mainline = new Map();
+const searchReferences = [
+  { category: "reservas", name: "Kaido R32 Advan",
+    image: "https://raceland.eu/thumbnail/f0/54/22/1794823388/67-10314_800x574.jpg?ts=1794823389" },
+  { category: "collector", name: "Land Cruiser",
+    image: "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRaWfrQVTUwfJaEJKhHM7LwVWbLeCbO9qkHyU308lswvA&s=10" },
+  { category: "team_transport", name: "Team Transport Rexy", aliases: ["TT Rexy"],
+    image: "https://diecasthunter.de/cdn/shop/files/Pink-gruenes-YouTube--Bannerbild-Reisen-Urlaub-Fuer-Lau-29_917b4918-b6fc-4b02-97da-a56b4105ddca.png?v=1791386567&width=1100" }
+];
 const catalogModels = new Map();
 const completedGuides = new Set();
 const mainlineLoading = new Set();
@@ -645,12 +653,15 @@ async function loadMainline(year = $("mainline-year").value) {
   if (mainlineLoading.has(year)) return;
   mainlineLoading.add(year);
   try {
-    const response = await fetch("data/mainline-" + year + ".json");
+    const response = await fetch("data/mainline-" + year + ".json", { cache: "no-cache" });
     if (!response.ok) throw new Error("No se pudo leer el catálogo");
     const models = await response.json();
     mainline.set(year, models);
     for (const model of models) {
-      catalogModels.set(productKey(model.category || "basicos", catalogItem(model, year)), { ...model, year });
+      const category = model.category || "basicos";
+      const item = catalogItem(model, year);
+      const reference = { ...model, year, key: productKey(category, item) };
+      for (const name of [item, ...(model.aliases || [])]) catalogModels.set(productKey(category, name), reference);
     }
     if (me) {
       renderMine();
@@ -668,6 +679,12 @@ async function loadMainline(year = $("mainline-year").value) {
 
 function productKey(category, item) {
   return category + "|" + item.trim().toLowerCase();
+}
+
+for (const reference of searchReferences) {
+  const key = productKey(reference.category, reference.name);
+  const model = { ...reference, key };
+  for (const name of [model.name, ...(model.aliases || [])]) catalogModels.set(productKey(model.category, name), model);
 }
 
 function catalogItem(model, year) {
@@ -692,7 +709,7 @@ function renderMainline() {
   matches.sort((a, b) => (b.releaseDate || "").localeCompare(a.releaseDate || "")
     || (b.waveOrder || 0) - (a.waveOrder || 0));
   const own = new Set(wants.filter((w) => w.user_id === me.id && w.status === "open" && w.category === category)
-    .map((w) => searchKey(w.item)));
+    .map((w) => catalogModels.get(productKey(category, w.item))?.key || productKey(category, w.item)));
   const count = matches.length === 1 ? "1 modelo" : matches.length + " modelos";
   const hasWaves = matches.some((model) => model.waveOrder);
   $("mainline-status").textContent = matches.length
@@ -702,8 +719,8 @@ function renderMainline() {
   $("mainline-results").replaceChildren(...matches.slice(0, mainlineLimit).map((model) => {
     const number = model.number ? "#" + String(model.number).padStart(3, "0") : "";
     const item = catalogItem(model, year);
-    const details = [model.variant, number && number + "/250", model.series, model.wave].filter(Boolean);
-    const alreadyOpen = own.has(searchKey(item));
+    const details = [model.variant, model.illustration && "Ilustración", number && number + "/250", model.series, model.wave].filter(Boolean);
+    const alreadyOpen = own.has(productKey(category, item));
     const button = h("button", {
       type: "button", class: "ghost small", disabled: alreadyOpen || !categories.some((cat) => cat.id === category),
       onclick: async () => {
@@ -727,7 +744,7 @@ function catalogThumbnail(model) {
   const placeholder = h("span", {}, "Sin foto");
   const thumbnail = h("div", { class: "catalog-thumbnail" }, placeholder);
   if (model.image) {
-    const img = h("img", { src: model.image, alt: "Foto de " + model.name,
+    const img = h("img", { src: model.image, alt: (model.illustration ? "Ilustración de " : "Foto de ") + model.name,
       loading: "lazy", decoding: "async", referrerpolicy: "no-referrer", width: 88, height: 60 });
     img.addEventListener("error", () => thumbnail.replaceChildren(placeholder));
     thumbnail.replaceChildren(img);
@@ -813,7 +830,7 @@ function renderMine() {
     list.append(h("div", { class: "item search-entry" },
       catalogThumbnail(model || { name: w.item }),
       h("div", { class: "search-copy" }, h("div", { class: "item-name" }, model?.name || w.item),
-        h("span", { class: "count" }, [labels.get(w.category) || w.category, model?.year, model?.variant, model?.series].filter(Boolean).join(" · ")),
+        h("span", { class: "count" }, [labels.get(w.category) || w.category, model?.year, model?.variant, model?.illustration && "Ilustración", model?.series].filter(Boolean).join(" · ")),
         w.notes ? h("p", { class: "note" }, w.notes) : ""),
       h("div", { class: "search-actions" }, h("button", {
         type: "button", class: "ghost small", "aria-label": "Marcar " + w.item + " como encontrado",
@@ -829,8 +846,10 @@ function renderGroup() {
   const groups = new Map();
   for (const want of wants) {
     if (want.status !== "open") continue;
-    const key = productKey(want.category, want.item);
-    if (!groups.has(key)) groups.set(key, { model: catalogModels.get(key), want, people: new Map() });
+    const lookup = productKey(want.category, want.item);
+    const model = catalogModels.get(lookup);
+    const key = model?.key || lookup;
+    if (!groups.has(key)) groups.set(key, { model, want, people: new Map() });
     const own = want.user_id === me.id;
     const name = own ? me.nickname + " (tú)" : want.profiles?.nickname || "Miembro del grupo";
     groups.get(key).people.set(want.user_id, { name, own });
@@ -851,7 +870,7 @@ function renderGroup() {
     box.append(h("div", { class: "item search-entry" },
       catalogThumbnail(model || { name: want.item }),
       h("div", { class: "search-copy" }, h("div", { class: "item-name" }, model?.name || want.item),
-        h("span", { class: "count" }, [labels.get(want.category) || want.category, model?.year, model?.variant, interest].filter(Boolean).join(" · ")), chips)));
+        h("span", { class: "count" }, [labels.get(want.category) || want.category, model?.year, model?.variant, model?.illustration && "Ilustración", interest].filter(Boolean).join(" · ")), chips)));
   }
 }
 
@@ -861,8 +880,7 @@ function render() {
   renderMine();
   if (!$("view-catalog").hidden) renderMainline();
   for (const year of ["2026", "2027"]) {
-    const suffix = new RegExp(" · " + year + "(?: |$)");
-    if (!mainline.has(year) && wants.some((w) => w.status === "open" && suffix.test(w.item))) loadMainline(year);
+    if (!mainline.has(year) && wants.some((w) => w.status === "open")) loadMainline(year);
   }
   const lists = $("lists");
   const previous = new Map(Array.from(lists.children, (section) => [section.dataset.category, section.open]));

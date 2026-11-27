@@ -248,5 +248,7 @@
   {"number": 247, "name": "Gazella GT", "series": "Trophy Case"},
   {"number": 248, "name": "Custom Vanster", "series": "Trophy Case"},
   {"number": 249, "name": "'67 Pontiac Firebird 400", "series": "Cool Classics"},
-  {"number": 250, "name": "Porsche 908-3", "series": "Cool Classics"}
+  {"number": 250, "name": "Porsche 908-3", "series": "Cool Classics"},
+  {"name": "Toyota Supra Chase", "category": "premium", "series": "Fast & Furious Premium", "sku": "JHW78", "aliases": ["Supra Chase"], "variant": "Naranja", "wave": "Mix 4", "waveOrder": 4, "url": "https://allhotwheels.com/car/2026/fast-furious/jhw78/toyota-supra", "image": "https://www.hwcgarage.com/_img/rs:fit:1280:1280/el:1/q:80/plain/s3://media-hwc/public/119253/01_2e8bc783-9ed0-4db1-85f2-35903e47a231.webp"},
+  {"name": "1970 Dodge Charger R/T Chase", "category": "premium", "series": "Fast & Furious Premium", "sku": "JHW74", "aliases": ["Charger chase"], "variant": "Negro", "wave": "Mix 3", "waveOrder": 3, "url": "https://allhotwheels.com/car/2026/fast-furious/jhw74/1970-dodge-charger-r-t", "image": "https://www.hwcgarage.com/_img/rs:fit:1280:1280/el:1/q:80/plain/s3://media-hwc/public/87648/01_f03a4c5c-a55f-4cb8-965d-fa65c0bab800.webp"}
 ]
