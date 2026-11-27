@@ -1030,7 +1030,7 @@ function renderGroup() {
     if (!groups.has(key)) groups.set(key, { model, want, people: new Map() });
     const own = want.user_id === me.id;
     const name = own ? me.nickname + " (tú)" : want.profiles?.nickname || "Miembro del grupo";
-    groups.get(key).people.set(want.user_id, { name, own });
+    groups.get(key).people.set(want.user_id, { name, own, want });
   }
 
   $("group-count").textContent = groups.size === 1 ? "1 modelo buscado" : groups.size + " modelos buscados";
@@ -1044,6 +1044,16 @@ function renderGroup() {
     const names = [...people.values()].sort((a, b) => a.name.localeCompare(b.name, "es"));
     const chips = h("div", { class: "chips" }, ...names.map(({ name, own }) =>
       h("span", { class: own ? "chip mine" : "chip" }, name)));
+    const ownWant = people.get(me.id)?.want;
+    chips.append(ownWant
+      ? withdrawButton(ownWant)
+      : h("button", {
+        type: "button", class: "ghost small",
+        onclick: async () => {
+          const err = await addWant(want.category, want.item);
+          if (err) alert(err);
+        }
+      }, "+ Yo también"));
     const interest = people.size === 1 ? "1 persona" : people.size + " personas";
     box.append(h("div", { class: "item search-entry" },
       catalogThumbnail(model || { name: want.item }),
